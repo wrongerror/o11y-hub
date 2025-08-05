@@ -5,10 +5,12 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 )
 
 type TLSConfig struct {
@@ -18,11 +20,20 @@ type TLSConfig struct {
 	ClientKey  string
 	ServerName string
 	SkipVerify bool
+	CertDir    string // 证书目录
 }
 
 // GetGRPCDialOpts returns gRPC dial options with TLS configuration
 func (c *TLSConfig) GetGRPCDialOpts() ([]grpc.DialOption, error) {
 	var dialOpts []grpc.DialOption
+
+	// 添加keepalive参数
+	keepaliveParams := keepalive.ClientParameters{
+		Time:                10 * time.Second,
+		Timeout:             5 * time.Second,
+		PermitWithoutStream: true,
+	}
+	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(keepaliveParams))
 
 	if c.DisableSSL {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -31,21 +42,26 @@ func (c *TLSConfig) GetGRPCDialOpts() ([]grpc.DialOption, error) {
 
 	// For mutual TLS (when client cert/key are provided)
 	if c.ClientCert != "" && c.ClientKey != "" {
-		return c.getMutualTLSDialOpts()
+		return c.getMutualTLSDialOpts(dialOpts)
 	}
 
 	// For server-side TLS only
-	return c.getServerSideTLSDialOpts()
+	return c.getServerSideTLSDialOpts(dialOpts)
 }
 
 // getMutualTLSDialOpts configures mutual TLS (client certificate authentication)
-func (c *TLSConfig) getMutualTLSDialOpts() ([]grpc.DialOption, error) {
-	var dialOpts []grpc.DialOption
+func (c *TLSConfig) getMutualTLSDialOpts(dialOpts []grpc.DialOption) ([]grpc.DialOption, error) {
+	certManager := NewCertificateManager(c.CertDir)
 
 	// Load client certificate pair
-	cert, err := tls.LoadX509KeyPair(c.ClientCert, c.ClientKey)
+	cert, err := certManager.LoadClientCertificate(c.ClientCert, c.ClientKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load client certificates: %w", err)
+	}
+
+	// Validate certificate
+	if err := certManager.ValidateCertificate(cert); err != nil {
+		return nil, fmt.Errorf("client certificate validation failed: %w", err)
 	}
 
 	// Load CA certificate if provided
@@ -75,8 +91,7 @@ func (c *TLSConfig) getMutualTLSDialOpts() ([]grpc.DialOption, error) {
 }
 
 // getServerSideTLSDialOpts configures server-side TLS only
-func (c *TLSConfig) getServerSideTLSDialOpts() ([]grpc.DialOption, error) {
-	var dialOpts []grpc.DialOption
+func (c *TLSConfig) getServerSideTLSDialOpts(dialOpts []grpc.DialOption) ([]grpc.DialOption, error) {
 
 	tlsConfig := &tls.Config{
 		ServerName:         c.ServerName,

@@ -1,9 +1,10 @@
-.PHONY: proto build clean run-query run-health install-deps test mock-server
+.PHONY: proto build clean run-query run-health run-server install-deps test mock-server demo demo-auto install uninstall fmt lint check setup-certs help dev release
 
 # Variables
 PROTO_DIR = proto
 BINARY_NAME = observo-connector
 MOCK_SERVER = mock-server
+SERVER_PORT = 8080
 
 # Default target
 all: install-deps proto build
@@ -12,12 +13,6 @@ all: install-deps proto build
 install-deps:
 	go mod tidy
 	go mod download
-
-# Install protoc tools if needed
-install-protoc:
-	@echo "Installing protoc tools..."
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 # Generate Go code from proto files
 proto:
@@ -47,100 +42,75 @@ clean:
 	rm -f $(PROTO_DIR)/*.pb.go
 
 # Run tests
-test: build mock-server
+test: build
 	@echo "Running tests..."
-	./test.sh
+	go test ./... -v
 
-# Example commands to run queries
+# Run query command (example)
 run-query: build
-	./$(BINARY_NAME) query "df.head(5)" \
-		--cluster-id=your-cluster-id \
-		--address=vizier.pixie.svc.cluster.local:51400 \
-		--skip-verify=true
+	@echo "Running example query..."
+	./$(BINARY_NAME) query "dx.display_name" \
+		--cluster-id=demo-cluster \
+		--address=localhost:50051 \
+		--disable-ssl
 
+# Run health check
 run-health: build
+	@echo "Running health check..."
 	./$(BINARY_NAME) health \
-		--cluster-id=your-cluster-id \
-		--address=vizier.pixie.svc.cluster.local:51400 \
-		--skip-verify=true
+		--cluster-id=demo-cluster \
+		--address=localhost:50051 \
+		--disable-ssl
 
-# Run with mutual TLS (when you have client certificates)
-run-query-mtls: build
-	./$(BINARY_NAME) query "df.head(5)" \
-		--cluster-id=your-cluster-id \
-		--address=vizier.pixie.svc.cluster.local:51400 \
-		--ca-cert=certs/ca.crt \
-		--client-cert=certs/client.crt \
-		--client-key=certs/client.key \
-		--server-name=vizier.pixie.svc.cluster.local
+# Start HTTP server
+run-server: build
+	@echo "Starting HTTP server on port $(SERVER_PORT)..."
+	./$(BINARY_NAME) server \
+		--port=$(SERVER_PORT) \
+		--cluster-id=demo-cluster \
+		--address=localhost:50051 \
+		--disable-ssl
 
-# Test with mock server
-test-mock: build mock-server
-	@echo "Starting mock server..."
-	./$(MOCK_SERVER) & \
-	SERVER_PID=$$!; \
-	sleep 2; \
-	echo "Testing health check..."; \
-	./$(BINARY_NAME) health \
-		--cluster-id=test-cluster \
-		--address=localhost:51400 \
-		--disable-ssl=true; \
-	echo "Testing query..."; \
-	./$(BINARY_NAME) query "df.head(5)" \
-		--cluster-id=test-cluster \
-		--address=localhost:51400 \
-		--disable-ssl=true; \
-	kill $$SERVER_PID
+# Run interactive demo
+demo: build
+	@echo "Starting interactive demo..."
+	./demo.sh
 
-# Install protoc if not available
-check-protoc:
-	@which protoc > /dev/null || { \
-		echo "protoc not found. Installing..."; \
-		echo "Ubuntu/Debian: apt install protobuf-compiler"; \
-		echo "macOS: brew install protobuf"; \
-		echo "Or download from: https://github.com/protocolbuffers/protobuf/releases"; \
-		exit 1; \
-	}
+# Run automatic demo
+demo-auto: build
+	@echo "Running automatic demo..."
+	./demo.sh --auto
 
-# Setup development environment
-setup: check-protoc install-protoc install-deps
-	@echo "Development environment ready!"
+# Install observo-connector binary to system
+install: build
+	@echo "Installing $(BINARY_NAME) to /usr/local/bin..."
+	sudo cp $(BINARY_NAME) /usr/local/bin/
+	@echo "✅ $(BINARY_NAME) installed successfully"
 
-# Create certificates directory with dummy certs (for demo purposes)
-certs:
-	@mkdir -p certs
-	@echo "Creating dummy certificates for demo..."
-	@echo "-----BEGIN CERTIFICATE-----" > certs/ca.crt
-	@echo "MIIBkTCB+wIJAMlyFqk69v+9MA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMMCWxv" >> certs/ca.crt
-	@echo "Y2FsaG9zdDAeFw0yMzEyMDEwMDAwMDBaFw0yNCEyMzEyMzU5NTlaMBQxEjAQBgNV" >> certs/ca.crt
-	@echo "BAMMCWxvY2FsaG9zdDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABHxYj5k6lN4t" >> certs/ca.crt
-	@echo "-----END CERTIFICATE-----" >> certs/ca.crt
-	@echo "-----BEGIN CERTIFICATE-----" > certs/client.crt
-	@echo "MIIBkTCB+wIJAMlyFqk69v+9MA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMMCWxv" >> certs/client.crt
-	@echo "Y2FsaG9zdDAeFw0yMzEyMDEwMDAwMDBaFw0yNCEyMzEyMzU5NTlaMBQxEjAQBgNV" >> certs/client.crt
-	@echo "BAMMCWxvY2FsaG9zdDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABHxYj5k6lN4t" >> certs/client.crt
-	@echo "-----END CERTIFICATE-----" >> certs/client.crt
-	@echo "-----BEGIN PRIVATE KEY-----" > certs/client.key
-	@echo "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg7S8j9k0Z5N8Q7y+p" >> certs/client.key
-	@echo "-----END PRIVATE KEY-----" >> certs/client.key
-	@echo "Demo certificates created in certs/ directory"
+# Create certificates directory
+setup-certs:
+	@echo "Setting up certificates directory..."
+	mkdir -p certs
+	@echo "✅ Certificates directory created"
 
-# Deploy to Kubernetes
-deploy:
-	./deploy.sh
+# Format code
+fmt:
+	@echo "Formatting code..."
+	go fmt ./...
 
 # Show help
 help:
-	@echo "Available targets:"
-	@echo "  all         - Install deps, generate proto, and build"
-	@echo "  build       - Build the observo-connector binary"
-	@echo "  mock-server - Build the mock server binary"
-	@echo "  build-all   - Build both binaries"
-	@echo "  proto       - Generate protobuf code"
-	@echo "  test        - Run test script"
-	@echo "  test-mock   - Test with mock server"
-	@echo "  clean       - Clean generated files"
-	@echo "  setup       - Setup development environment"
-	@echo "  certs       - Create dummy certificates"
-	@echo "  deploy      - Deploy to Kubernetes"
-	@echo "  help        - Show this help"
+	@echo "Available commands:"
+	@echo "  make build         - Build the observo-connector binary"
+	@echo "  make build-all     - Build all binaries"
+	@echo "  make proto         - Generate protobuf code"
+	@echo "  make test          - Run tests"
+	@echo "  make clean         - Clean generated files"
+	@echo "  make run-query     - Run example query"
+	@echo "  make run-health    - Run health check"
+	@echo "  make run-server    - Start HTTP server"
+	@echo "  make demo          - Run interactive demo"
+	@echo "  make demo-auto     - Run automatic demo"
+	@echo "  make setup-certs   - Create certificates directory"
+	@echo "  make fmt           - Format code"
+	@echo "  make help          - Show this help"

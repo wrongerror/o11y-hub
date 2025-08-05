@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	_ "google.golang.org/grpc/encoding/gzip" // Register gzip compressor
 
+	"github.com/wrongerror/observo-connector/pkg/common"
 	"github.com/wrongerror/observo-connector/pkg/config"
 	pb "github.com/wrongerror/observo-connector/proto"
 )
@@ -67,7 +69,7 @@ func (c *Client) Close() error {
 }
 
 // ExecuteScript executes a PxL script on Vizier and returns the results
-func (c *Client) ExecuteScript(ctx context.Context, clusterID, query string) error {
+func (c *Client) ExecuteScript(ctx context.Context, clusterID string, query string) error {
 	req := &pb.ExecuteScriptRequest{
 		ClusterId: clusterID,
 		QueryStr:  query,
@@ -129,6 +131,165 @@ func (c *Client) ExecuteScript(ctx context.Context, clusterID, query string) err
 
 	c.logger.Info("Script execution completed")
 	return nil
+}
+
+// ExecuteScriptAndExtractData 执行脚本并提取结构化数据
+func (c *Client) ExecuteScriptAndExtractData(ctx context.Context, clusterID string, query string) (*common.QueryResult, error) {
+	startTime := time.Now()
+	req := &pb.ExecuteScriptRequest{
+		ClusterId: clusterID,
+		QueryStr:  query,
+	}
+
+	c.logger.WithFields(logrus.Fields{
+		"cluster_id": clusterID,
+		"query":      query,
+	}).Info("Executing script and extracting data")
+
+	stream, err := c.client.ExecuteScript(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute script: %w", err)
+	}
+
+	result := &common.QueryResult{
+		Query:      query,
+		ExecutedAt: startTime,
+		Timestamp:  time.Now(),
+		Data:       make([]map[string]interface{}, 0),
+		Columns:    make([]string, 0),
+		Metadata: map[string]string{
+			"cluster_id": clusterID,
+		},
+	}
+
+	var currentTable *pb.QueryMetadata
+
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to receive response: %w", err)
+		}
+
+		if resp.Status != nil && resp.Status.Code != 0 {
+			result.Error = resp.Status.Message
+			c.logger.WithFields(logrus.Fields{
+				"code":    resp.Status.Code,
+				"message": resp.Status.Message,
+			}).Error("Query execution error")
+			return result, fmt.Errorf("query execution failed: %s", resp.Status.Message)
+		}
+
+		switch resultData := resp.Result.(type) {
+		case *pb.ExecuteScriptResponse_MetaData:
+			currentTable = resultData.MetaData
+			// 提取列信息
+			for _, col := range currentTable.Columns {
+				result.Columns = append(result.Columns, col.ColumnName)
+			}
+
+			c.logger.WithFields(logrus.Fields{
+				"table_name": currentTable.Name,
+				"table_id":   currentTable.Id,
+				"columns":    len(currentTable.Columns),
+			}).Info("Received table metadata")
+
+		case *pb.ExecuteScriptResponse_Data:
+			if currentTable == nil {
+				continue
+			}
+
+			batch := resultData.Data.Batch
+			extractedRows := c.extractRowsFromBatch(batch, currentTable.Columns)
+			result.Data = append(result.Data, extractedRows...)
+			result.RowCount += int(batch.NumRows)
+
+			if resultData.Data.ExecutionStats != nil {
+				stats := resultData.Data.ExecutionStats
+				result.Metadata["timing_ns"] = fmt.Sprintf("%d", stats.Timing)
+				result.Metadata["bytes_processed"] = fmt.Sprintf("%d", stats.BytesProcessed)
+				result.Metadata["records_processed"] = fmt.Sprintf("%d", stats.RecordsProcessed)
+			}
+		}
+	}
+
+	result.Duration = time.Since(startTime)
+	c.logger.WithFields(logrus.Fields{
+		"duration":  result.Duration,
+		"row_count": result.RowCount,
+	}).Info("Script execution and data extraction completed")
+
+	return result, nil
+}
+
+// extractRowsFromBatch 从批次数据中提取行
+func (c *Client) extractRowsFromBatch(batch *pb.RowBatchData, columns []*pb.Column) []map[string]interface{} {
+	rows := make([]map[string]interface{}, 0)
+	numRows := int(batch.NumRows)
+
+	if numRows == 0 {
+		return rows
+	}
+
+	// 初始化数据索引
+	stringIdx := 0
+	int64Idx := 0
+	float64Idx := 0
+	boolIdx := 0
+	uint128Idx := 0
+
+	for rowIdx := 0; rowIdx < numRows; rowIdx++ {
+		row := make(map[string]interface{})
+
+		for _, col := range columns {
+			var value interface{}
+
+			switch col.ColumnType {
+			case pb.DataType_STRING:
+				if stringIdx < len(batch.StringData) {
+					value = batch.StringData[stringIdx]
+					stringIdx++
+				}
+			case pb.DataType_INT64:
+				if int64Idx < len(batch.Int64Data) {
+					value = batch.Int64Data[int64Idx]
+					int64Idx++
+				}
+			case pb.DataType_FLOAT64:
+				if float64Idx < len(batch.Float64Data) {
+					value = batch.Float64Data[float64Idx]
+					float64Idx++
+				}
+			case pb.DataType_BOOLEAN:
+				if boolIdx < len(batch.BoolData) {
+					value = batch.BoolData[boolIdx]
+					boolIdx++
+				}
+			case pb.DataType_UINT128:
+				if uint128Idx < len(batch.Uint128Data) {
+					value = batch.Uint128Data[uint128Idx]
+					uint128Idx++
+				}
+			case pb.DataType_TIME64NS:
+				if int64Idx < len(batch.Int64Data) {
+					// 将纳秒时间戳转换为time.Time
+					nsTimestamp := batch.Int64Data[int64Idx]
+					value = time.Unix(0, nsTimestamp)
+					int64Idx++
+				}
+			default:
+				value = nil
+			}
+
+			row[col.ColumnName] = value
+		}
+
+		rows = append(rows, row)
+	}
+
+	return rows
 }
 
 // HealthCheck performs a health check on the Vizier cluster

@@ -1,14 +1,17 @@
 # Observo Connector
 
-一个通用的可观测性数据连接器，用于直接与各种可观测性数据源通信，包括Pixie Vizier、Beyla等。
+一个通用的可观测性数据连接器，用于直接与各种可观测性数据源通信，包括Pixie Vizier、Beyla等。支持数据导出为多种格式，包括Prometheus metrics、JSON、CSV等。
 
 ## 功能特性
 
 - 支持多种可观测性数据源
-- 支持TLS和mTLS认证
-- 执行查询并获取结果
+- 支持TLS和mTLS认证，包括证书管理
+- 执行查询并获取结构化数据
 - 健康检查功能
-- 简单的命令行界面
+- HTTP API服务器，支持RESTful接口
+- 多种数据导出格式：Prometheus、JSON、CSV
+- 实时数据转换和指标提取
+- 支持Prometheus metrics格式输出
 - 可扩展的连接器架构
 
 ## 支持的数据源
@@ -17,24 +20,39 @@
 - **Beyla**: 应用性能监控
 - 更多数据源支持开发中...
 
+## 支持的导出格式
+
+- **Prometheus**: 兼容Prometheus的metrics格式
+- **JSON**: 结构化JSON数据
+- **CSV**: 表格数据格式
+- **OpenTelemetry**: OTLP格式 (计划中)
+
 ## 项目结构
 
 ```
 observo-connector/
 ├── cmd/
-│   ├── main.go              # 主程序入口
+│   ├── main.go              # 主程序入口，支持多种命令
 │   └── mock-server/
 │       └── main.go          # Mock服务器（用于测试）
 ├── pkg/
 │   ├── config/
-│   │   └── tls.go          # TLS配置管理
+│   │   ├── tls.go          # TLS配置管理
+│   │   └── certificates.go # 证书管理
+│   ├── common/
+│   │   └── types.go        # 公共类型定义
+│   ├── export/
+│   │   └── exporters.go    # 数据导出器
+│   ├── server/
+│   │   └── http.go         # HTTP API服务器
 │   └── vizier/
-│       └── client.go       # Vizier客户端
+│       └── client.go       # Vizier客户端，支持数据提取
 ├── proto/
 │   ├── vizierapi.proto     # Vizier API定义
 │   ├── vizierapi.pb.go     # 生成的protobuf代码
 │   └── vizierapi_grpc.pb.go # 生成的gRPC代码
 ├── certs/                  # 证书文件目录
+├── config.example.yaml     # 配置文件示例
 ├── go.mod
 ├── Makefile
 ├── deploy.sh              # Kubernetes部署脚本
@@ -48,6 +66,311 @@ observo-connector/
 
 确保你已经安装了：
 - Go 1.23+
+- protoc (Protocol Buffers compiler)
+- make
+
+### 2. 构建项目
+
+```bash
+# 克隆项目
+git clone https://github.com/wrongerror/observo-connector.git
+cd observo-connector
+
+# 安装依赖并构建
+make build
+```
+
+### 3. 配置
+
+复制示例配置文件并修改：
+
+```bash
+cp config.example.yaml config.yaml
+# 编辑config.yaml以匹配你的环境
+```
+
+### 4. 运行
+
+#### 命令行模式
+
+```bash
+# 健康检查
+./observo-connector health --cluster-id=my-cluster --address=localhost:50051
+
+# 执行查询
+./observo-connector query "dx.display_name" --cluster-id=my-cluster
+
+# 使用配置文件
+./observo-connector query "dx.display_name" --config=config.yaml
+```
+
+#### HTTP服务器模式
+
+```bash
+# 启动HTTP API服务器
+./observo-connector server --port=8080 --cluster-id=my-cluster
+
+# 使用配置文件启动
+./observo-connector server --config=config.yaml
+```
+
+## HTTP API接口
+
+启动服务器后，可以使用以下API接口：
+
+### 查询接口
+
+#### POST /api/v1/query
+执行查询并返回结构化数据
+
+```bash
+curl -X POST http://localhost:8080/api/v1/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "dx.display_name",
+    "cluster_id": "my-cluster",
+    "format": "json"
+  }'
+```
+
+#### GET /api/v1/query
+通过URL参数执行查询
+
+```bash
+curl "http://localhost:8080/api/v1/query?query=dx.display_name&cluster_id=my-cluster&format=json"
+```
+
+### 健康检查
+
+#### GET /api/v1/health
+检查Vizier集群健康状态
+
+```bash
+curl "http://localhost:8080/api/v1/health?cluster_id=my-cluster"
+```
+
+### Prometheus Metrics
+
+#### GET /api/v1/metrics
+获取Prometheus格式的指标
+
+```bash
+# 获取内部指标
+curl http://localhost:8080/api/v1/metrics
+
+# 从查询结果获取指标
+curl "http://localhost:8080/api/v1/metrics?query=http_events&cluster_id=my-cluster"
+```
+
+### 数据导出
+
+#### POST /api/v1/export
+导出查询结果为指定格式
+
+```bash
+curl -X POST http://localhost:8080/api/v1/export \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "http_events",
+    "cluster_id": "my-cluster",
+    "format": "prometheus",
+    "options": {
+      "compression": false
+    }
+  }'
+```
+
+## TLS/mTLS 配置
+
+### 服务器端TLS
+
+```yaml
+disable_ssl: false
+ca_cert: "certs/ca.crt"
+server_name: "vizier.example.com"
+skip_verify: false
+```
+
+### 双向TLS (mTLS)
+
+```yaml
+disable_ssl: false
+ca_cert: "certs/ca.crt"
+client_cert: "certs/client.crt"
+client_key: "certs/client.key"
+server_name: "vizier.example.com"
+```
+
+### 证书管理
+
+connector支持自动证书管理和验证：
+
+- 证书有效性检查
+- 证书路径解析（支持相对和绝对路径）
+- 证书目录管理
+
+## 数据导出格式
+
+### Prometheus格式
+
+```
+# HELP http_requests_total Total HTTP requests
+# TYPE http_requests_total counter
+http_requests_total{method="GET",status="200"} 1234 1691234567000
+```
+
+### JSON格式
+
+```json
+{
+  "query": "http_events",
+  "executed_at": "2024-08-05T10:30:00Z",
+  "duration": "1.2s",
+  "row_count": 100,
+  "columns": ["time", "method", "url", "status"],
+  "data": [
+    {
+      "time": "2024-08-05T10:29:00Z",
+      "method": "GET",
+      "url": "/api/users",
+      "status": 200
+    }
+  ]
+}
+```
+
+### CSV格式
+
+```csv
+time,method,url,status
+2024-08-05T10:29:00Z,GET,/api/users,200
+2024-08-05T10:29:01Z,POST,/api/users,201
+```
+
+## 高级功能
+
+### 数据转换
+
+connector自动将Pixie查询结果转换为标准化格式：
+
+- 时间戳处理（纳秒精度转换）
+- 数据类型映射
+- 标签提取和规范化
+- 指标类型推断
+
+### 批处理和流式处理
+
+- 支持大结果集的批处理
+- 流式数据处理，降低内存使用
+- 可配置的批次大小
+
+## 部署
+
+### Kubernetes部署
+
+```bash
+# 使用提供的部署脚本
+./deploy.sh
+
+# 或手动部署
+kubectl apply -f k8s/
+```
+
+### Docker部署
+
+```bash
+# 构建镜像
+docker build -t observo-connector .
+
+# 运行容器
+docker run -p 8080:8080 \
+  -v $(pwd)/certs:/app/certs \
+  -v $(pwd)/config.yaml:/app/config.yaml \
+  observo-connector server --config=/app/config.yaml
+```
+
+## 开发
+
+### 添加新的数据源
+
+1. 在 `pkg/` 下创建新的包
+2. 实现 `common.DataSource` 接口
+3. 在主程序中注册新的数据源
+
+### 添加新的导出格式
+
+1. 在 `pkg/export/exporters.go` 中实现 `DataExporter` 接口
+2. 在 `ExporterFactory` 中注册新格式
+3. 更新 `common.ExportFormat` 常量
+
+### 运行测试
+
+```bash
+make test
+```
+
+### 生成protobuf代码
+
+```bash
+make proto
+```
+
+## 监控和日志
+
+### 内置指标
+
+connector提供以下内置指标：
+
+- `observo_connector_queries_total`: 总查询数
+- `observo_connector_up`: 服务状态
+- `observo_connector_build_info`: 构建信息
+
+### 日志配置
+
+支持结构化日志，包含以下信息：
+
+- 查询执行时间
+- 数据处理统计
+- 错误和警告信息
+- 性能指标
+
+## 故障排除
+
+### 常见问题
+
+1. **连接失败**
+   - 检查Vizier地址和端口
+   - 验证TLS证书配置
+   - 确认网络连通性
+
+2. **证书错误**
+   - 验证证书文件路径
+   - 检查证书有效期
+   - 确认CA证书配置
+
+3. **查询超时**
+   - 增加查询超时时间
+   - 检查查询复杂度
+   - 验证集群资源状况
+
+### 调试模式
+
+```bash
+# 启用详细日志
+./observo-connector server --log-level=debug
+```
+
+## 贡献
+
+欢迎提交Pull Request和Issue。请确保：
+
+1. 代码通过所有测试
+2. 添加适当的文档
+3. 遵循Go代码规范
+
+## 许可证
+
+本项目采用MIT许可证 - 详见 [LICENSE](LICENSE) 文件。
 - protoc (Protocol Buffers编译器)
 - protoc-gen-go 和 protoc-gen-go-grpc 插件
 

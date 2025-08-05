@@ -357,6 +357,7 @@ type QueryMetadata struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Columns       []*Column              `protobuf:"bytes,3,rep,name=columns,proto3" json:"columns,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -403,6 +404,13 @@ func (x *QueryMetadata) GetId() string {
 		return x.Id
 	}
 	return ""
+}
+
+func (x *QueryMetadata) GetColumns() []*Column {
+	if x != nil {
+		return x.Columns
+	}
+	return nil
 }
 
 type QueryExecutionStats struct {
@@ -778,10 +786,11 @@ const file_proto_vizierapi_proto_rawDesc = "" +
 	"int64_data\x18\x04 \x03(\x03R\tint64Data\x12!\n" +
 	"\ffloat64_data\x18\x05 \x03(\x01R\vfloat64Data\x12\x1b\n" +
 	"\tbool_data\x18\x06 \x03(\bR\bboolData\x12!\n" +
-	"\fuint128_data\x18\a \x03(\x04R\vuint128Data\"3\n" +
+	"\fuint128_data\x18\a \x03(\x04R\vuint128Data\"d\n" +
 	"\rQueryMetadata\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\x83\x01\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12/\n" +
+	"\acolumns\x18\x03 \x03(\v2\x15.demo.vizierpb.ColumnR\acolumns\"\x83\x01\n" +
 	"\x13QueryExecutionStats\x12\x16\n" +
 	"\x06timing\x18\x01 \x01(\x03R\x06timing\x12'\n" +
 	"\x0fbytes_processed\x18\x02 \x01(\x03R\x0ebytesProcessed\x12+\n" +
@@ -827,7 +836,7 @@ const file_proto_vizierapi_proto_rawDesc = "" +
 	"\x0eST_DURATION_NS\x10\x85\a2\xc5\x01\n" +
 	"\rVizierService\x12\\\n" +
 	"\rExecuteScript\x12#.demo.vizierpb.ExecuteScriptRequest\x1a$.demo.vizierpb.ExecuteScriptResponse0\x01\x12V\n" +
-	"\vHealthCheck\x12!.demo.vizierpb.HealthCheckRequest\x1a\".demo.vizierpb.HealthCheckResponse0\x01B\x16Z\x14demo-connector/protob\x06proto3"
+	"\vHealthCheck\x12!.demo.vizierpb.HealthCheckRequest\x1a\".demo.vizierpb.HealthCheckResponse0\x01B/Z-github.com/wrongerror/observo-connector/protob\x06proto3"
 
 var (
 	file_proto_vizierapi_proto_rawDescOnce sync.Once
@@ -861,21 +870,22 @@ var file_proto_vizierapi_proto_depIdxs = []int32{
 	0,  // 0: demo.vizierpb.Column.column_type:type_name -> demo.vizierpb.DataType
 	1,  // 1: demo.vizierpb.Column.column_semantic_type:type_name -> demo.vizierpb.SemanticType
 	3,  // 2: demo.vizierpb.RowBatchData.cols:type_name -> demo.vizierpb.Column
-	4,  // 3: demo.vizierpb.QueryData.batch:type_name -> demo.vizierpb.RowBatchData
-	6,  // 4: demo.vizierpb.QueryData.execution_stats:type_name -> demo.vizierpb.QueryExecutionStats
-	2,  // 5: demo.vizierpb.ExecuteScriptResponse.status:type_name -> demo.vizierpb.Status
-	7,  // 6: demo.vizierpb.ExecuteScriptResponse.data:type_name -> demo.vizierpb.QueryData
-	5,  // 7: demo.vizierpb.ExecuteScriptResponse.meta_data:type_name -> demo.vizierpb.QueryMetadata
-	2,  // 8: demo.vizierpb.HealthCheckResponse.status:type_name -> demo.vizierpb.Status
-	8,  // 9: demo.vizierpb.VizierService.ExecuteScript:input_type -> demo.vizierpb.ExecuteScriptRequest
-	10, // 10: demo.vizierpb.VizierService.HealthCheck:input_type -> demo.vizierpb.HealthCheckRequest
-	9,  // 11: demo.vizierpb.VizierService.ExecuteScript:output_type -> demo.vizierpb.ExecuteScriptResponse
-	11, // 12: demo.vizierpb.VizierService.HealthCheck:output_type -> demo.vizierpb.HealthCheckResponse
-	11, // [11:13] is the sub-list for method output_type
-	9,  // [9:11] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	3,  // 3: demo.vizierpb.QueryMetadata.columns:type_name -> demo.vizierpb.Column
+	4,  // 4: demo.vizierpb.QueryData.batch:type_name -> demo.vizierpb.RowBatchData
+	6,  // 5: demo.vizierpb.QueryData.execution_stats:type_name -> demo.vizierpb.QueryExecutionStats
+	2,  // 6: demo.vizierpb.ExecuteScriptResponse.status:type_name -> demo.vizierpb.Status
+	7,  // 7: demo.vizierpb.ExecuteScriptResponse.data:type_name -> demo.vizierpb.QueryData
+	5,  // 8: demo.vizierpb.ExecuteScriptResponse.meta_data:type_name -> demo.vizierpb.QueryMetadata
+	2,  // 9: demo.vizierpb.HealthCheckResponse.status:type_name -> demo.vizierpb.Status
+	8,  // 10: demo.vizierpb.VizierService.ExecuteScript:input_type -> demo.vizierpb.ExecuteScriptRequest
+	10, // 11: demo.vizierpb.VizierService.HealthCheck:input_type -> demo.vizierpb.HealthCheckRequest
+	9,  // 12: demo.vizierpb.VizierService.ExecuteScript:output_type -> demo.vizierpb.ExecuteScriptResponse
+	11, // 13: demo.vizierpb.VizierService.HealthCheck:output_type -> demo.vizierpb.HealthCheckResponse
+	12, // [12:14] is the sub-list for method output_type
+	10, // [10:12] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_proto_vizierapi_proto_init() }

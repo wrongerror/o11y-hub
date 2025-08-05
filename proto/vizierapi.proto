@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package demo.vizierpb;
 
-option go_package = "demo-connector/proto";
+option go_package = "github.com/wrongerror/observo-connector/proto";
 
 // Simplified version of Pixie's Vizier API for demo purposes
 
@@ -52,6 +52,7 @@ message RowBatchData {
 message QueryMetadata {
   string name = 1;
   string id = 2;
+  repeated Column columns = 3;
 }
 
 message QueryExecutionStats {
