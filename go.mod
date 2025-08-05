@@ -1,4 +1,4 @@
-module github.com/observo-io/observo-connector
+module github.com/wrongerror/observo-connector
 
 go 1.23.0
 

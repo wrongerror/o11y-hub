@@ -9,8 +9,8 @@ import (
 	"google.golang.org/grpc"
 	_ "google.golang.org/grpc/encoding/gzip" // Register gzip compressor
 
-	"github.com/observo-io/observo-connector/pkg/config"
-	pb "github.com/observo-io/observo-connector/proto"
+	"github.com/wrongerror/observo-connector/pkg/config"
+	pb "github.com/wrongerror/observo-connector/proto"
 )
 
 type Client struct {

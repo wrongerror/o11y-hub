@@ -9,8 +9,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/observo-io/observo-connector/pkg/config"
-	"github.com/observo-io/observo-connector/pkg/vizier"
+	"github.com/wrongerror/observo-connector/pkg/config"
+	"github.com/wrongerror/observo-connector/pkg/vizier"
 )
 
 var (
@@ -26,7 +26,7 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "github.com/observo-io/observo-connector",
+	Use:   "github.com/wrongerror/observo-connector",
 	Short: "Demo connector for Pixie Vizier",
 	Long:  `A universal observability data connector for various data sources including Pixie Vizier, Beyla, etc.`,
 }

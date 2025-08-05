@@ -4,7 +4,7 @@ import (
 "context"
 "fmt"
 
-"github.com/observo-io/observo-connector/pkg/common"
+"github.com/wrongerror/observo-connector/pkg/common"
 )
 
 // BeylaClient implements the common.DataSource interface for Beyla
