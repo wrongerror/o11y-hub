@@ -1,0 +1,41 @@
+# Observo Connector Configuration for Real Pixie Environment (via port-forward)
+server:
+  port: 8080
+  host: "0.0.0.0"
+
+vizier:
+  # Vizier query broker service address via port-forward
+  address: "localhost:50300"
+  
+  # Cluster configuration
+  cluster_id: "kubernetes-admin@cluster.local"
+  
+  # TLS configuration using extracted certificates
+  tls:
+    enabled: true
+    cert_file: "certs/client.crt"
+    key_file: "certs/client.key"
+    ca_file: "certs/ca.crt"
+    server_name: ""  # Use empty for localhost communication
+    insecure_skip_verify: false
+
+# Data export configuration
+export:
+  # Default format for data export
+  default_format: "json"
+  
+  # Export formats to enable
+  formats:
+    - json
+    - csv
+    - prometheus
+
+# Logging configuration
+log:
+  level: "debug"
+  format: "json"
+
+# Optional: Metrics configuration
+metrics:
+  enabled: true
+  path: "/metrics"

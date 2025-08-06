@@ -229,13 +229,8 @@ func (s *Server) executeQuery(ctx context.Context, query, clusterID string) (*co
 		"cluster_id": clusterID,
 	}).Info("Executing query")
 
-	// 使用新的数据提取方法
-	result, err := s.vizierClient.ExecuteScriptAndExtractData(ctx, clusterID, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute query: %w", err)
-	}
-
-	return result, nil
+	// TODO: Implement ExecuteScriptAndExtractData method
+	return nil, fmt.Errorf("ExecuteScriptAndExtractData not implemented yet")
 }
 
 // writeDefaultMetrics 写入默认指标

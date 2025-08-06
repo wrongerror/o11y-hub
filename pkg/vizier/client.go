@@ -2,51 +2,108 @@ package vizier
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/wrongerror/observo-connector/pkg/auth"
+	pb "github.com/wrongerror/observo-connector/proto/vizierpb"
 	"google.golang.org/grpc"
-	_ "google.golang.org/grpc/encoding/gzip" // Register gzip compressor
-
-	"github.com/wrongerror/observo-connector/pkg/common"
-	"github.com/wrongerror/observo-connector/pkg/config"
-	pb "github.com/wrongerror/observo-connector/proto"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
+// Client represents a Vizier client
 type Client struct {
 	conn   *grpc.ClientConn
 	client pb.VizierServiceClient
 	logger *logrus.Logger
+	config *Config
 }
 
-type ConnectOptions struct {
-	Address   string
-	TLSConfig *config.TLSConfig
+// Config represents the client configuration
+type Config struct {
+	Address            string
+	TLSEnabled         bool
+	CACert             string
+	ClientCert         string
+	ClientKey          string
+	ServerName         string
+	InsecureSkipVerify bool
+
+	// JWT Authentication options
+	JWTSigningKey  string
+	JWTUserID      string
+	JWTOrgID       string
+	JWTEmail       string
+	JWTServiceName string
+
+	// Direct Vizier options
+	DirectVizierKey string
 }
 
 // NewClient creates a new Vizier client
-func NewClient(ctx context.Context, opts ConnectOptions) (*Client, error) {
-	logger := logrus.New()
-
-	dialOpts, err := opts.TLSConfig.GetGRPCDialOpts()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get gRPC dial options: %w", err)
+func NewClient(address string, opts ...Option) (*Client, error) {
+	config := &Config{
+		Address:    address,
+		TLSEnabled: true,
 	}
 
-	// Add compression and other options
-	dialOpts = append(dialOpts,
-		grpc.WithDefaultCallOptions(grpc.UseCompressor("gzip")),
-		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
-	)
+	for _, opt := range opts {
+		opt(config)
+	}
 
-	logger.WithFields(logrus.Fields{
-		"address":     opts.Address,
-		"tls_enabled": !opts.TLSConfig.DisableSSL,
-	}).Info("Connecting to Vizier")
+	logger := logrus.New()
 
-	conn, err := grpc.DialContext(ctx, opts.Address, dialOpts...)
+	var dialOpts []grpc.DialOption
+
+	if config.TLSEnabled {
+		var tlsConfig *tls.Config
+		if config.InsecureSkipVerify {
+			tlsConfig = &tls.Config{InsecureSkipVerify: true}
+		} else if config.CACert != "" || config.ClientCert != "" {
+			tlsConfig = &tls.Config{}
+
+			if config.CACert != "" {
+				caCert, err := ioutil.ReadFile(config.CACert)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+				}
+
+				caCertPool := x509.NewCertPool()
+				caCertPool.AppendCertsFromPEM(caCert)
+				tlsConfig.RootCAs = caCertPool
+			}
+
+			if config.ClientCert != "" && config.ClientKey != "" {
+				clientCert, err := tls.LoadX509KeyPair(config.ClientCert, config.ClientKey)
+				if err != nil {
+					return nil, fmt.Errorf("failed to load client certificate: %w", err)
+				}
+				tlsConfig.Certificates = []tls.Certificate{clientCert}
+			}
+
+			if config.ServerName != "" {
+				tlsConfig.ServerName = config.ServerName
+			}
+		} else {
+			tlsConfig = &tls.Config{}
+		}
+
+		creds := credentials.NewTLS(tlsConfig)
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
+	} else {
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+
+	logger.WithField("address", address).WithField("tls_enabled", config.TLSEnabled).Info("Connecting to Vizier")
+
+	conn, err := grpc.Dial(address, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Vizier: %w", err)
 	}
@@ -57,10 +114,11 @@ func NewClient(ctx context.Context, opts ConnectOptions) (*Client, error) {
 		conn:   conn,
 		client: client,
 		logger: logger,
+		config: config,
 	}, nil
 }
 
-// Close closes the connection to Vizier
+// Close closes the client connection
 func (c *Client) Close() error {
 	if c.conn != nil {
 		return c.conn.Close()
@@ -68,228 +126,49 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// ExecuteScript executes a PxL script on Vizier and returns the results
-func (c *Client) ExecuteScript(ctx context.Context, clusterID string, query string) error {
-	req := &pb.ExecuteScriptRequest{
-		ClusterId: clusterID,
-		QueryStr:  query,
+// getAuthenticatedContext creates a context with authentication headers
+func (c *Client) getAuthenticatedContext(ctx context.Context) context.Context {
+	// Use direct Vizier key if provided
+	if c.config.DirectVizierKey != "" {
+		return metadata.AppendToOutgoingContext(ctx, "X-DIRECT-VIZIER-KEY", c.config.DirectVizierKey)
 	}
 
-	c.logger.WithFields(logrus.Fields{
-		"cluster_id": clusterID,
-		"query":      query,
-	}).Info("Executing script")
+	// Use JWT authentication if signing key is provided
+	if c.config.JWTSigningKey != "" {
+		var token string
+		var err error
 
-	stream, err := c.client.ExecuteScript(ctx, req)
-	if err != nil {
-		return fmt.Errorf("failed to execute script: %w", err)
-	}
+		if c.config.JWTServiceName != "" {
+			// Service authentication
+			token, err = auth.GenerateServiceJWTToken(c.config.JWTSigningKey, c.config.JWTServiceName, time.Hour)
+		} else {
+			// User authentication
+			userID := c.config.JWTUserID
+			if userID == "" {
+				userID = "observo-connector-user"
+			}
+			orgID := c.config.JWTOrgID
+			if orgID == "" {
+				orgID = "observo-connector-org"
+			}
+			email := c.config.JWTEmail
+			if email == "" {
+				email = "observo@connector.local"
+			}
 
-	for {
-		resp, err := stream.Recv()
-		if err == io.EOF {
-			break
+			token, err = auth.GenerateJWTToken(c.config.JWTSigningKey, userID, orgID, email, time.Hour)
 		}
+
 		if err != nil {
-			return fmt.Errorf("failed to receive response: %w", err)
+			c.logger.WithError(err).Error("Failed to generate JWT token")
+			return ctx
 		}
 
-		if resp.Status != nil && resp.Status.Code != 0 {
-			c.logger.WithFields(logrus.Fields{
-				"code":    resp.Status.Code,
-				"message": resp.Status.Message,
-			}).Error("Query execution error")
-			return fmt.Errorf("query execution failed: %s", resp.Status.Message)
-		}
-
-		switch result := resp.Result.(type) {
-		case *pb.ExecuteScriptResponse_MetaData:
-			c.logger.WithFields(logrus.Fields{
-				"table_name": result.MetaData.Name,
-				"table_id":   result.MetaData.Id,
-			}).Info("Received table metadata")
-
-		case *pb.ExecuteScriptResponse_Data:
-			batch := result.Data.Batch
-			c.logger.WithFields(logrus.Fields{
-				"num_rows": batch.NumRows,
-				"num_cols": len(batch.Cols),
-			}).Info("Received data batch")
-
-			c.printTableData(batch)
-
-			if result.Data.ExecutionStats != nil {
-				stats := result.Data.ExecutionStats
-				c.logger.WithFields(logrus.Fields{
-					"timing_ns":         stats.Timing,
-					"bytes_processed":   stats.BytesProcessed,
-					"records_processed": stats.RecordsProcessed,
-				}).Info("Execution statistics")
-			}
-		}
+		return metadata.AppendToOutgoingContext(ctx, "authorization", fmt.Sprintf("bearer %s", token))
 	}
 
-	c.logger.Info("Script execution completed")
-	return nil
-}
-
-// ExecuteScriptAndExtractData 执行脚本并提取结构化数据
-func (c *Client) ExecuteScriptAndExtractData(ctx context.Context, clusterID string, query string) (*common.QueryResult, error) {
-	startTime := time.Now()
-	req := &pb.ExecuteScriptRequest{
-		ClusterId: clusterID,
-		QueryStr:  query,
-	}
-
-	c.logger.WithFields(logrus.Fields{
-		"cluster_id": clusterID,
-		"query":      query,
-	}).Info("Executing script and extracting data")
-
-	stream, err := c.client.ExecuteScript(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute script: %w", err)
-	}
-
-	result := &common.QueryResult{
-		Query:      query,
-		ExecutedAt: startTime,
-		Timestamp:  time.Now(),
-		Data:       make([]map[string]interface{}, 0),
-		Columns:    make([]string, 0),
-		Metadata: map[string]string{
-			"cluster_id": clusterID,
-		},
-	}
-
-	var currentTable *pb.QueryMetadata
-
-	for {
-		resp, err := stream.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to receive response: %w", err)
-		}
-
-		if resp.Status != nil && resp.Status.Code != 0 {
-			result.Error = resp.Status.Message
-			c.logger.WithFields(logrus.Fields{
-				"code":    resp.Status.Code,
-				"message": resp.Status.Message,
-			}).Error("Query execution error")
-			return result, fmt.Errorf("query execution failed: %s", resp.Status.Message)
-		}
-
-		switch resultData := resp.Result.(type) {
-		case *pb.ExecuteScriptResponse_MetaData:
-			currentTable = resultData.MetaData
-			// 提取列信息
-			for _, col := range currentTable.Columns {
-				result.Columns = append(result.Columns, col.ColumnName)
-			}
-
-			c.logger.WithFields(logrus.Fields{
-				"table_name": currentTable.Name,
-				"table_id":   currentTable.Id,
-				"columns":    len(currentTable.Columns),
-			}).Info("Received table metadata")
-
-		case *pb.ExecuteScriptResponse_Data:
-			if currentTable == nil {
-				continue
-			}
-
-			batch := resultData.Data.Batch
-			extractedRows := c.extractRowsFromBatch(batch, currentTable.Columns)
-			result.Data = append(result.Data, extractedRows...)
-			result.RowCount += int(batch.NumRows)
-
-			if resultData.Data.ExecutionStats != nil {
-				stats := resultData.Data.ExecutionStats
-				result.Metadata["timing_ns"] = fmt.Sprintf("%d", stats.Timing)
-				result.Metadata["bytes_processed"] = fmt.Sprintf("%d", stats.BytesProcessed)
-				result.Metadata["records_processed"] = fmt.Sprintf("%d", stats.RecordsProcessed)
-			}
-		}
-	}
-
-	result.Duration = time.Since(startTime)
-	c.logger.WithFields(logrus.Fields{
-		"duration":  result.Duration,
-		"row_count": result.RowCount,
-	}).Info("Script execution and data extraction completed")
-
-	return result, nil
-}
-
-// extractRowsFromBatch 从批次数据中提取行
-func (c *Client) extractRowsFromBatch(batch *pb.RowBatchData, columns []*pb.Column) []map[string]interface{} {
-	rows := make([]map[string]interface{}, 0)
-	numRows := int(batch.NumRows)
-
-	if numRows == 0 {
-		return rows
-	}
-
-	// 初始化数据索引
-	stringIdx := 0
-	int64Idx := 0
-	float64Idx := 0
-	boolIdx := 0
-	uint128Idx := 0
-
-	for rowIdx := 0; rowIdx < numRows; rowIdx++ {
-		row := make(map[string]interface{})
-
-		for _, col := range columns {
-			var value interface{}
-
-			switch col.ColumnType {
-			case pb.DataType_STRING:
-				if stringIdx < len(batch.StringData) {
-					value = batch.StringData[stringIdx]
-					stringIdx++
-				}
-			case pb.DataType_INT64:
-				if int64Idx < len(batch.Int64Data) {
-					value = batch.Int64Data[int64Idx]
-					int64Idx++
-				}
-			case pb.DataType_FLOAT64:
-				if float64Idx < len(batch.Float64Data) {
-					value = batch.Float64Data[float64Idx]
-					float64Idx++
-				}
-			case pb.DataType_BOOLEAN:
-				if boolIdx < len(batch.BoolData) {
-					value = batch.BoolData[boolIdx]
-					boolIdx++
-				}
-			case pb.DataType_UINT128:
-				if uint128Idx < len(batch.Uint128Data) {
-					value = batch.Uint128Data[uint128Idx]
-					uint128Idx++
-				}
-			case pb.DataType_TIME64NS:
-				if int64Idx < len(batch.Int64Data) {
-					// 将纳秒时间戳转换为time.Time
-					nsTimestamp := batch.Int64Data[int64Idx]
-					value = time.Unix(0, nsTimestamp)
-					int64Idx++
-				}
-			default:
-				value = nil
-			}
-
-			row[col.ColumnName] = value
-		}
-
-		rows = append(rows, row)
-	}
-
-	return rows
+	// No authentication configured, return context as-is
+	return ctx
 }
 
 // HealthCheck performs a health check on the Vizier cluster
@@ -300,7 +179,10 @@ func (c *Client) HealthCheck(ctx context.Context, clusterID string) error {
 
 	c.logger.WithField("cluster_id", clusterID).Info("Performing health check")
 
-	stream, err := c.client.HealthCheck(ctx, req)
+	// Add authentication to context
+	authCtx := c.getAuthenticatedContext(ctx)
+
+	stream, err := c.client.HealthCheck(authCtx, req)
 	if err != nil {
 		return fmt.Errorf("failed to perform health check: %w", err)
 	}
@@ -311,12 +193,12 @@ func (c *Client) HealthCheck(ctx context.Context, clusterID string) error {
 	}
 
 	if resp != nil && resp.Status != nil {
-		if resp.Status.Code != 0 {
+		if resp.Status.ErrCode != pb.Code_OK {
 			c.logger.WithFields(logrus.Fields{
-				"code":    resp.Status.Code,
-				"message": resp.Status.Message,
+				"code":    resp.Status.ErrCode,
+				"message": resp.Status.Msg,
 			}).Error("Health check failed")
-			return fmt.Errorf("health check failed: %s", resp.Status.Message)
+			return fmt.Errorf("health check failed: %s", resp.Status.Msg)
 		}
 	}
 
@@ -324,78 +206,66 @@ func (c *Client) HealthCheck(ctx context.Context, clusterID string) error {
 	return nil
 }
 
-// printTableData prints the table data in a readable format
-func (c *Client) printTableData(batch *pb.RowBatchData) {
-	if len(batch.Cols) == 0 {
-		c.logger.Info("No columns in batch")
-		return
+// Option represents a configuration option
+type Option func(*Config)
+
+// WithTLS enables TLS
+func WithTLS(enabled bool) Option {
+	return func(c *Config) {
+		c.TLSEnabled = enabled
 	}
+}
 
-	// Print column headers
-	fmt.Printf("\n")
-	for i, col := range batch.Cols {
-		if i > 0 {
-			fmt.Printf("\t")
-		}
-		fmt.Printf("%s", col.ColumnName)
+// WithCACert sets the CA certificate
+func WithCACert(path string) Option {
+	return func(c *Config) {
+		c.CACert = path
 	}
-	fmt.Printf("\n")
+}
 
-	// Print separator
-	for i := range batch.Cols {
-		if i > 0 {
-			fmt.Printf("\t")
-		}
-		fmt.Printf("--------")
+// WithClientCert sets the client certificate
+func WithClientCert(certPath, keyPath string) Option {
+	return func(c *Config) {
+		c.ClientCert = certPath
+		c.ClientKey = keyPath
 	}
-	fmt.Printf("\n")
+}
 
-	// Print data rows (simplified - assumes string data for demo)
-	stringDataIdx := 0
-	int64DataIdx := 0
-	float64DataIdx := 0
-	boolDataIdx := 0
-
-	for row := int64(0); row < batch.NumRows; row++ {
-		for colIdx, col := range batch.Cols {
-			if colIdx > 0 {
-				fmt.Printf("\t")
-			}
-
-			switch col.ColumnType {
-			case pb.DataType_STRING:
-				if stringDataIdx < len(batch.StringData) {
-					fmt.Printf("%s", batch.StringData[stringDataIdx])
-					stringDataIdx++
-				} else {
-					fmt.Printf("NULL")
-				}
-			case pb.DataType_INT64:
-				if int64DataIdx < len(batch.Int64Data) {
-					fmt.Printf("%d", batch.Int64Data[int64DataIdx])
-					int64DataIdx++
-				} else {
-					fmt.Printf("NULL")
-				}
-			case pb.DataType_FLOAT64:
-				if float64DataIdx < len(batch.Float64Data) {
-					fmt.Printf("%.2f", batch.Float64Data[float64DataIdx])
-					float64DataIdx++
-				} else {
-					fmt.Printf("NULL")
-				}
-			case pb.DataType_BOOLEAN:
-				if boolDataIdx < len(batch.BoolData) {
-					fmt.Printf("%t", batch.BoolData[boolDataIdx])
-					boolDataIdx++
-				} else {
-					fmt.Printf("NULL")
-				}
-			default:
-				fmt.Printf("?")
-			}
-		}
-		fmt.Printf("\n")
+// WithServerName sets the server name
+func WithServerName(name string) Option {
+	return func(c *Config) {
+		c.ServerName = name
 	}
-	fmt.Printf("\n")
+}
+
+// WithInsecureSkipVerify skips TLS verification
+func WithInsecureSkipVerify(skip bool) Option {
+	return func(c *Config) {
+		c.InsecureSkipVerify = skip
+	}
+}
+
+// WithJWTAuth configures JWT authentication
+func WithJWTAuth(signingKey, userID, orgID, email string) Option {
+	return func(c *Config) {
+		c.JWTSigningKey = signingKey
+		c.JWTUserID = userID
+		c.JWTOrgID = orgID
+		c.JWTEmail = email
+	}
+}
+
+// WithJWTServiceAuth configures JWT service authentication
+func WithJWTServiceAuth(signingKey, serviceName string) Option {
+	return func(c *Config) {
+		c.JWTSigningKey = signingKey
+		c.JWTServiceName = serviceName
+	}
+}
+
+// WithDirectVizierKey configures direct Vizier key authentication
+func WithDirectVizierKey(key string) Option {
+	return func(c *Config) {
+		c.DirectVizierKey = key
+	}
 }
