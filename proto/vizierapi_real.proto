@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package px.api.vizierpb;
 
-option go_package = "vizierpb";
+option go_package = "github.com/wrongerror/observo-connector/proto/vizierpb";
 
 import "google/protobuf/any.proto";
 
@@ -39,8 +39,195 @@ message HealthCheckResponse {
   Status status = 1;
 }
 
+// Execute script request
+message ExecuteScriptRequest {
+  // The PxL script to execute
+  string query_str = 1;
+  // The cluster ID
+  string cluster_id = 3;
+  // Optional execution functions
+  repeated QueryFunc exec_funcs = 4;
+  // Whether this is a mutation query
+  bool mutation = 5;
+  // Query name for metrics (custom field)
+  string query_name = 6;
+}
+
+// Query function definition
+message QueryFunc {
+  // Function name
+  string func_name = 1;
+  // Arguments for the function
+  repeated QueryArg arg_values = 2;
+  // Output table prefix
+  string output_table_prefix = 3;
+}
+
+// Query argument
+message QueryArg {
+  // Argument name
+  string name = 1;
+  // Argument value
+  string value = 2;
+}
+
+// Execute script response
+message ExecuteScriptResponse {
+  // Query ID
+  string query_id = 1;
+  // Status of the query
+  Status status = 2;
+  
+  oneof result {
+    // Query metadata (table schemas)
+    QueryMetadata meta_data = 3;
+    // Query data
+    QueryData data = 4;
+  }
+}
+
+// Query metadata (table schema information)
+message QueryMetadata {
+  // Table name
+  string name = 1;
+  // Table ID
+  string id = 2;
+  // Table relation/schema
+  Relation relation = 3;
+}
+
+// Table relation/schema definition
+message Relation {
+  repeated Column columns = 1;
+}
+
+// Column definition
+message Column {
+  string column_name = 1;
+  DataType column_type = 2;
+  SemanticType column_semantic_type = 3;
+}
+
+// Data types enum
+enum DataType {
+  DATA_TYPE_UNKNOWN = 0;
+  BOOLEAN = 1;
+  INT64 = 2;
+  UINT128 = 3;
+  FLOAT64 = 4;
+  STRING = 5;
+  TIME64NS = 6;
+}
+
+// Semantic types enum  
+enum SemanticType {
+  ST_NONE = 0;
+  ST_TIME_NS = 1;
+  ST_SERVICE_NAME = 2;
+  ST_POD = 3;
+  ST_CONTAINER = 4;
+  ST_NAMESPACE = 5;
+  ST_NODE = 6;
+  ST_UPID = 7;
+  ST_IP_ADDRESS = 8;
+  ST_PORT = 9;
+  ST_HTTP_RESP_STATUS = 10;
+  ST_HTTP_RESP_MESSAGE = 11;
+  ST_DURATION_NS = 12;
+  ST_THROUGHPUT_PER_NS = 13;
+  ST_THROUGHPUT_BYTES_PER_NS = 14;
+  ST_QUANTILES = 15;
+  ST_PERCENT = 16;
+  ST_BYTES = 17;
+}
+
+// Query data
+message QueryData {
+  // Row batch data
+  RowBatchData batch = 1;
+  // Execution statistics
+  QueryExecutionStats execution_stats = 2;
+}
+
+// Row batch data
+message RowBatchData {
+  // Table ID
+  string table_id = 1;
+  // Column data
+  repeated ColumnData cols = 2;
+  // Number of rows
+  int64 num_rows = 3;
+  // End of window
+  bool eow = 4;
+  // End of stream  
+  bool eos = 5;
+}
+
+// Column data (union type for different data types)
+message ColumnData {
+  oneof col_data {
+    BooleanColumn boolean_data = 1;
+    Int64Column int64_data = 2;
+    UInt128Column uint128_data = 3;
+    Float64Column float64_data = 4;
+    StringColumn string_data = 5;
+    Time64NSColumn time64ns_data = 6;
+  }
+}
+
+// Boolean column data
+message BooleanColumn {
+  repeated bool data = 1;
+}
+
+// Int64 column data
+message Int64Column {
+  repeated int64 data = 1;
+}
+
+// UInt128 column data (represented as bytes)
+message UInt128Column {
+  repeated bytes data = 1;
+}
+
+// Float64 column data
+message Float64Column {
+  repeated double data = 1;
+}
+
+// String column data
+message StringColumn {
+  repeated bytes data = 1;
+}
+
+// Time64NS column data
+message Time64NSColumn {
+  repeated int64 data = 1;
+}
+
+// Query execution statistics
+message QueryExecutionStats {
+  // Timing information
+  QueryTimingInfo timing = 1;
+  // Bytes processed
+  int64 bytes_processed = 2;
+  // Records processed
+  int64 records_processed = 3;
+}
+
+// Query timing information
+message QueryTimingInfo {
+  // Execution time in nanoseconds
+  int64 execution_time_ns = 1;
+  // Compilation time in nanoseconds
+  int64 compilation_time_ns = 2;
+}
+
 // The API that manages all communication with a particular Vizier cluster.
 service VizierService {
   // Start a stream to receive health updates from the Vizier service.
   rpc HealthCheck(HealthCheckRequest) returns (stream HealthCheckResponse);
+  
+  // Execute a PxL script and return results as a stream
+  rpc ExecuteScript(ExecuteScriptRequest) returns (stream ExecuteScriptResponse);
 }

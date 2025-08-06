@@ -11,7 +11,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/wrongerror/observo-connector/pkg/auth"
-	pb "github.com/wrongerror/observo-connector/proto/vizierpb"
+	pb "github.com/wrongerror/observo-connector/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -47,75 +47,68 @@ type Config struct {
 	DirectVizierKey string
 }
 
+// Option represents a configuration option
+type Option func(*Config)
+
 // NewClient creates a new Vizier client
-func NewClient(address string, opts ...Option) (*Client, error) {
+func NewClient(address string, logger *logrus.Logger, opts ...Option) (*Client, error) {
 	config := &Config{
 		Address:    address,
 		TLSEnabled: true,
 	}
 
+	// Apply options
 	for _, opt := range opts {
 		opt(config)
 	}
 
-	logger := logrus.New()
-
-	var dialOpts []grpc.DialOption
-
+	// Setup credentials
+	var creds credentials.TransportCredentials
 	if config.TLSEnabled {
-		var tlsConfig *tls.Config
-		if config.InsecureSkipVerify {
-			tlsConfig = &tls.Config{InsecureSkipVerify: true}
-		} else if config.CACert != "" || config.ClientCert != "" {
-			tlsConfig = &tls.Config{}
-
-			if config.CACert != "" {
-				caCert, err := ioutil.ReadFile(config.CACert)
-				if err != nil {
-					return nil, fmt.Errorf("failed to read CA certificate: %w", err)
-				}
-
-				caCertPool := x509.NewCertPool()
-				caCertPool.AppendCertsFromPEM(caCert)
-				tlsConfig.RootCAs = caCertPool
-			}
-
-			if config.ClientCert != "" && config.ClientKey != "" {
-				clientCert, err := tls.LoadX509KeyPair(config.ClientCert, config.ClientKey)
-				if err != nil {
-					return nil, fmt.Errorf("failed to load client certificate: %w", err)
-				}
-				tlsConfig.Certificates = []tls.Certificate{clientCert}
-			}
-
-			if config.ServerName != "" {
-				tlsConfig.ServerName = config.ServerName
-			}
-		} else {
-			tlsConfig = &tls.Config{}
+		tlsConfig := &tls.Config{
+			ServerName:         config.ServerName,
+			InsecureSkipVerify: config.InsecureSkipVerify,
 		}
 
-		creds := credentials.NewTLS(tlsConfig)
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
+		// Load CA certificate if provided
+		if config.CACert != "" {
+			caCert, err := ioutil.ReadFile(config.CACert)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+			}
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+			tlsConfig.RootCAs = caCertPool
+		}
+
+		// Load client certificate if provided
+		if config.ClientCert != "" && config.ClientKey != "" {
+			cert, err := tls.LoadX509KeyPair(config.ClientCert, config.ClientKey)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load client certificate: %w", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{cert}
+		}
+
+		creds = credentials.NewTLS(tlsConfig)
 	} else {
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		creds = insecure.NewCredentials()
 	}
 
-	logger.WithField("address", address).WithField("tls_enabled", config.TLSEnabled).Info("Connecting to Vizier")
-
-	conn, err := grpc.Dial(address, dialOpts...)
+	// Create gRPC connection
+	conn, err := grpc.Dial(address, grpc.WithTransportCredentials(creds))
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Vizier: %w", err)
+		return nil, fmt.Errorf("failed to connect to %s: %w", address, err)
 	}
 
-	client := pb.NewVizierServiceClient(conn)
-
-	return &Client{
+	client := &Client{
 		conn:   conn,
-		client: client,
+		client: pb.NewVizierServiceClient(conn),
 		logger: logger,
 		config: config,
-	}, nil
+	}
+
+	return client, nil
 }
 
 // Close closes the client connection
@@ -126,49 +119,46 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// getAuthenticatedContext creates a context with authentication headers
+// getAuthenticatedContext adds authentication to the context
 func (c *Client) getAuthenticatedContext(ctx context.Context) context.Context {
-	// Use direct Vizier key if provided
-	if c.config.DirectVizierKey != "" {
-		return metadata.AppendToOutgoingContext(ctx, "X-DIRECT-VIZIER-KEY", c.config.DirectVizierKey)
-	}
+	md := metadata.New(map[string]string{})
 
-	// Use JWT authentication if signing key is provided
+	// Add JWT authentication if configured
 	if c.config.JWTSigningKey != "" {
 		var token string
 		var err error
 
 		if c.config.JWTServiceName != "" {
 			// Service authentication
-			token, err = auth.GenerateServiceJWTToken(c.config.JWTSigningKey, c.config.JWTServiceName, time.Hour)
+			token, err = auth.GenerateServiceJWTToken(
+				c.config.JWTSigningKey,
+				c.config.JWTServiceName,
+				30*time.Minute,
+			)
 		} else {
 			// User authentication
-			userID := c.config.JWTUserID
-			if userID == "" {
-				userID = "observo-connector-user"
-			}
-			orgID := c.config.JWTOrgID
-			if orgID == "" {
-				orgID = "observo-connector-org"
-			}
-			email := c.config.JWTEmail
-			if email == "" {
-				email = "observo@connector.local"
-			}
-
-			token, err = auth.GenerateJWTToken(c.config.JWTSigningKey, userID, orgID, email, time.Hour)
+			token, err = auth.GenerateJWTToken(
+				c.config.JWTSigningKey,
+				c.config.JWTUserID,
+				c.config.JWTOrgID,
+				c.config.JWTEmail,
+				30*time.Minute,
+			)
 		}
 
 		if err != nil {
 			c.logger.WithError(err).Error("Failed to generate JWT token")
-			return ctx
+		} else {
+			md.Set("authorization", "Bearer "+token)
 		}
-
-		return metadata.AppendToOutgoingContext(ctx, "authorization", fmt.Sprintf("bearer %s", token))
 	}
 
-	// No authentication configured, return context as-is
-	return ctx
+	// Add direct Vizier key if configured
+	if c.config.DirectVizierKey != "" {
+		md.Set("pixie-api-key", c.config.DirectVizierKey)
+	}
+
+	return metadata.NewOutgoingContext(ctx, md)
 }
 
 // HealthCheck performs a health check on the Vizier cluster
@@ -206,8 +196,131 @@ func (c *Client) HealthCheck(ctx context.Context, clusterID string) error {
 	return nil
 }
 
-// Option represents a configuration option
-type Option func(*Config)
+// ExecuteScript executes a PxL script on the Vizier cluster
+func (c *Client) ExecuteScript(ctx context.Context, req *ExecuteScriptRequest) (*ExecuteScriptStream, error) {
+	// Build the proto request
+	protoReq := &pb.ExecuteScriptRequest{
+		ClusterId: req.ClusterID,
+		QueryStr:  req.QueryStr,
+		Mutation:  req.Mutation,
+		QueryName: req.QueryName,
+	}
+
+	// Add execution functions if provided
+	for _, fn := range req.ExecFuncs {
+		protoFunc := &pb.QueryFunc{
+			FuncName:          fn.FuncName,
+			OutputTablePrefix: fn.OutputTablePrefix,
+		}
+		for _, arg := range fn.Args {
+			protoFunc.ArgValues = append(protoFunc.ArgValues, &pb.QueryArg{
+				Name:  arg.Name,
+				Value: arg.Value,
+			})
+		}
+		protoReq.ExecFuncs = append(protoReq.ExecFuncs, protoFunc)
+	}
+
+	c.logger.WithFields(logrus.Fields{
+		"cluster_id": req.ClusterID,
+		"query":      req.QueryStr[:min(100, len(req.QueryStr))], // Log first 100 chars
+		"mutation":   req.Mutation,
+	}).Info("Executing script")
+
+	// Add authentication to context
+	authCtx := c.getAuthenticatedContext(ctx)
+
+	stream, err := c.client.ExecuteScript(authCtx, protoReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute script: %w", err)
+	}
+
+	return &ExecuteScriptStream{
+		stream: stream,
+		logger: c.logger,
+	}, nil
+}
+
+// ExecuteScriptRequest represents a script execution request
+type ExecuteScriptRequest struct {
+	ClusterID string
+	QueryStr  string
+	ExecFuncs []QueryFunc
+	Mutation  bool
+	QueryName string
+}
+
+// QueryFunc represents a query function
+type QueryFunc struct {
+	FuncName          string
+	Args              []QueryArg
+	OutputTablePrefix string
+}
+
+// QueryArg represents a query argument
+type QueryArg struct {
+	Name  string
+	Value string
+}
+
+// ExecuteScriptStream wraps the gRPC stream for script execution
+type ExecuteScriptStream struct {
+	stream pb.VizierService_ExecuteScriptClient
+	logger *logrus.Logger
+}
+
+// Recv receives the next response from the stream
+func (s *ExecuteScriptStream) Recv() (*pb.ExecuteScriptResponse, error) {
+	return s.stream.Recv()
+}
+
+// RecvAll receives all responses from the stream and returns them as a slice
+func (s *ExecuteScriptStream) RecvAll() ([]*pb.ExecuteScriptResponse, error) {
+	var responses []*pb.ExecuteScriptResponse
+
+	for {
+		resp, err := s.stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return responses, fmt.Errorf("failed to receive response: %w", err)
+		}
+
+		responses = append(responses, resp)
+
+		// Log progress
+		if resp.Status != nil && resp.Status.ErrCode != pb.Code_OK {
+			s.logger.WithFields(logrus.Fields{
+				"query_id": resp.QueryId,
+				"code":     resp.Status.ErrCode,
+				"message":  resp.Status.Msg,
+			}).Error("Script execution error")
+			return responses, fmt.Errorf("script execution failed: %s", resp.Status.Msg)
+		}
+
+		// Check for end of stream in data
+		if resp.GetData() != nil && resp.GetData().Batch != nil && resp.GetData().Batch.Eos {
+			s.logger.WithField("query_id", resp.QueryId).Info("End of stream reached")
+			break
+		}
+	}
+
+	return responses, nil
+}
+
+// Close closes the stream
+func (s *ExecuteScriptStream) Close() error {
+	return s.stream.CloseSend()
+}
+
+// min helper function
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
 
 // WithTLS enables TLS
 func WithTLS(enabled bool) Option {
