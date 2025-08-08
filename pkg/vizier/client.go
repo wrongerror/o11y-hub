@@ -213,31 +213,59 @@ func (c *Client) ExecuteScript(ctx context.Context, clusterID, query string) err
 
 	c.logger.Info("Script executed successfully, stream created")
 
-	// For now, just try to receive one response to see if the basic call works
-	resp, err := stream.Recv()
-	if err != nil {
+	// Process all responses from the stream
+	return c.processScriptResponses(stream)
+}
+
+// processScriptResponses handles all responses from the ExecuteScript stream
+func (c *Client) processScriptResponses(stream pb.VizierService_ExecuteScriptClient) error {
+	responseCount := 0
+	
+	for {
+		resp, err := stream.Recv()
 		if err == io.EOF {
-			c.logger.Info("Received EOF immediately")
-			return nil
+			c.logger.WithField("response_count", responseCount).Info("Script execution completed successfully")
+			break
 		}
-		return fmt.Errorf("failed to receive first response: %w", err)
+		if err != nil {
+			return fmt.Errorf("failed to receive response: %w", err)
+		}
+
+		responseCount++
+		
+		// Handle first response
+		if responseCount == 1 {
+			c.logger.WithField("query_id", resp.QueryId).Info("Received first response")
+		}
+
+		// Check for errors
+		if resp.Status != nil && resp.Status.Code != 0 {
+			return fmt.Errorf("script execution failed: %s", resp.Status.Message)
+		}
+
+		// Log detailed response in debug mode
+		if c.logger.Level >= logrus.DebugLevel {
+			c.logResponseDetails(resp, responseCount)
+		}
 	}
 
-	c.logger.WithField("query_id", resp.QueryId).Info("Received first response")
+	return nil
+}
+
+// logResponseDetails logs detailed information about the response
+func (c *Client) logResponseDetails(resp *pb.ExecuteScriptResponse, responseNum int) {
+	c.logger.WithFields(logrus.Fields{
+		"response_num": responseNum,
+		"query_id":     resp.QueryId,
+		"has_status":   resp.Status != nil,
+	}).Debug("Response details")
 
 	if resp.Status != nil {
 		c.logger.WithFields(logrus.Fields{
-			"status_code": resp.Status.Code,
-			"status_msg":  resp.Status.Message,
-		}).Info("Response status")
-
-		if resp.Status.Code != 0 { // 0 is OK status
-			return fmt.Errorf("script execution failed: %s", resp.Status.Message)
-		}
+			"status_code":    resp.Status.Code,
+			"status_message": resp.Status.Message,
+		}).Debug("Response status")
 	}
-
-	c.logger.Info("Script execution completed successfully")
-	return nil
 }
 
 // min helper function

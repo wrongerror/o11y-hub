@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/wrongerror/observo-connector/pkg/scripts"
 	"github.com/wrongerror/observo-connector/pkg/vizier"
 )
 
@@ -27,9 +30,13 @@ func main() {
 		skipVerify = flag.Bool("skip-verify", false, "Skip TLS verification")
 
 		// Action flags
-		healthCheck = flag.Bool("health-check", false, "Perform health check")
-		execScript  = flag.Bool("exec-script", false, "Execute a PxL script")
-		scriptQuery = flag.String("script-query", "", "PxL script query to execute")
+		healthCheck     = flag.Bool("health-check", false, "Perform health check")
+		execScript      = flag.Bool("exec-script", false, "Execute a PxL script")
+		scriptQuery     = flag.String("script-query", "", "PxL script query to execute")
+		builtinScript   = flag.String("builtin-script", "", "Execute a builtin script by name")
+		scriptParams    = flag.String("script-params", "", "Parameters for builtin script (key1=value1,key2=value2)")
+		listScripts     = flag.Bool("list-scripts", false, "List all available builtin scripts")
+		scriptHelp      = flag.String("script-help", "", "Show help for a specific builtin script")
 
 		// Misc flags
 		verbose = flag.Bool("verbose", false, "Enable verbose logging")
@@ -43,12 +50,27 @@ func main() {
 	}
 
 	logger.WithFields(logrus.Fields{
-		"health_check": *healthCheck,
-		"exec_script":  *execScript,
-		"script_query": *scriptQuery,
+		"health_check":   *healthCheck,
+		"exec_script":    *execScript,
+		"script_query":   *scriptQuery,
+		"builtin_script": *builtinScript,
+		"list_scripts":   *listScripts,
 	}).Debug("Command flags parsed")
 
-	// Validate required parameters
+	// Handle script-related actions first (don't need client connection)
+	if *listScripts {
+		executor := scripts.NewExecutor(nil, logger)
+		listBuiltinScripts(executor)
+		return
+	}
+
+	if *scriptHelp != "" {
+		executor := scripts.NewExecutor(nil, logger)
+		showScriptHelp(executor, *scriptHelp)
+		return
+	}
+
+	// Validate required parameters for actions that need connection
 	if *address == "" {
 		logger.Fatal("Address is required. Use --address flag")
 	}
@@ -85,15 +107,31 @@ func main() {
 		}
 	}
 
-	// Create client
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Handle script-related actions first (don't need client connection)
+	if *listScripts {
+		executor := scripts.NewExecutor(nil, logger)
+		listBuiltinScripts(executor)
+		return
+	}
+
+	if *scriptHelp != "" {
+		executor := scripts.NewExecutor(nil, logger)
+		showScriptHelp(executor, *scriptHelp)
+		return
+	}
+
+	// Create client for actions that need connection
 	client, err := vizier.NewClient(*address, logger, opts...)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create Vizier client")
 	}
 	defer client.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+	// Create script executor
+	executor := scripts.NewExecutor(client, logger)
 
 	// Perform requested action
 	if *healthCheck {
@@ -113,7 +151,94 @@ func main() {
 			logger.WithError(err).Fatal("Script execution failed")
 		}
 		logger.Info("Script execution completed!")
+	} else if *builtinScript != "" {
+		// Parse script parameters
+		params := parseScriptParams(*scriptParams)
+		logger.WithFields(logrus.Fields{
+			"script_name": *builtinScript,
+			"parameters":  params,
+		}).Info("Executing builtin script...")
+		
+		err := executor.ExecuteBuiltinScript(ctx, *clusterID, *builtinScript, params)
+		if err != nil {
+			logger.WithError(err).Fatal("Builtin script execution failed")
+		}
+		logger.Info("Builtin script execution completed!")
 	} else {
-		logger.Info("No action specified. Use --health-check to test connection or --exec-script to execute scripts")
+		logger.Info("No action specified. Use --health-check, --exec-script, --builtin-script, or --list-scripts")
 	}
+}
+
+// Helper functions
+func listBuiltinScripts(executor *scripts.Executor) {
+	scriptInfos := executor.ListBuiltinScripts()
+	
+	fmt.Println("\nAvailable Builtin Scripts:")
+	fmt.Println("==========================")
+	
+	categories := make(map[string][]string)
+	for name, script := range scriptInfos {
+		categories[script.Category] = append(categories[script.Category], name)
+	}
+	
+	for category, scriptNames := range categories {
+		fmt.Printf("\n%s:\n", category)
+		for _, name := range scriptNames {
+			script := scriptInfos[name]
+			fmt.Printf("  %-20s %s\n", name, script.Description)
+		}
+	}
+	
+	fmt.Println("\nUse --script-help <script-name> for detailed help on a specific script.")
+}
+
+func showScriptHelp(executor *scripts.Executor, scriptName string) {
+	info, err := executor.GetScriptHelp(scriptName)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	
+	fmt.Printf("\nScript: %s\n", info.Name)
+	fmt.Printf("Category: %s\n", info.Category)
+	fmt.Printf("Description: %s\n\n", info.Description)
+	
+	if len(info.Parameters) > 0 {
+		fmt.Println("Parameters:")
+		for _, param := range info.Parameters {
+			required := ""
+			if param.Required {
+				required = " (required)"
+			}
+			defaultVal := ""
+			if param.DefaultValue != "" {
+				defaultVal = fmt.Sprintf(" [default: %s]", param.DefaultValue)
+			}
+			fmt.Printf("  %-15s %s%s%s\n", param.Name, param.Description, required, defaultVal)
+		}
+	}
+	
+	fmt.Printf("\nExample usage:\n")
+	fmt.Printf("  --builtin-script %s", scriptName)
+	if len(info.Parameters) > 0 {
+		fmt.Printf(" --script-params \"param1=value1,param2=value2\"")
+	}
+	fmt.Println()
+}
+
+func parseScriptParams(paramStr string) map[string]string {
+	params := make(map[string]string)
+	if paramStr == "" {
+		return params
+	}
+	
+	pairs := strings.Split(paramStr, ",")
+	for _, pair := range pairs {
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) == 2 {
+			params[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+		}
+	}
+	
+	return params
 }
