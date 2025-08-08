@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package px.api.vizierpb;
+
+option go_package = "github.com/wrongerror/observo-connector/proto";
+
+// Status codes enum
+enum Code {
+  OK = 0;
+  INTERNAL = 1;
+  INVALID_ARGUMENT = 2;
+  NOT_FOUND = 3;
+  PERMISSION_DENIED = 4;
+  UNIMPLEMENTED = 5;
+  FAILED_PRECONDITION = 6;
+  RESOURCE_EXHAUSTED = 7;
+  CANCELLED = 8;
+  UNKNOWN = 9;
+}
+
+// Status message
+message Status {
+  Code err_code = 1;
+  string msg = 2;
+}
+
+// Request for the HealthCheck call.
+message HealthCheckRequest {
+  string cluster_id = 1;
+}
+
+// Response for the HealthCheck call.
+message HealthCheckResponse {
+  Status status = 1;
+}
+
+// Minimal ExecuteScript request - start simple
+message ExecuteScriptRequest {
+  string query_str = 1;
+  string cluster_id = 2;
+}
+
+// Minimal ExecuteScript response - start simple
+message ExecuteScriptResponse {
+  string query_id = 1;
+  Status status = 2;
+}
+
+// VizierService provides access to Pixie's Vizier
+service VizierService {
+  // HealthCheck checks the status of the Vizier.
+  rpc HealthCheck(HealthCheckRequest) returns (stream HealthCheckResponse);
+  
+  // ExecuteScript executes a script on Vizier.
+  rpc ExecuteScript(ExecuteScriptRequest) returns (stream ExecuteScriptResponse);
+}

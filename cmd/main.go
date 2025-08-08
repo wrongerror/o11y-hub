@@ -28,6 +28,8 @@ func main() {
 
 		// Action flags
 		healthCheck = flag.Bool("health-check", false, "Perform health check")
+		execScript  = flag.Bool("exec-script", false, "Execute a PxL script")
+		scriptQuery = flag.String("script-query", "", "PxL script query to execute")
 
 		// Misc flags
 		verbose = flag.Bool("verbose", false, "Enable verbose logging")
@@ -39,6 +41,12 @@ func main() {
 	if *verbose {
 		logger.SetLevel(logrus.DebugLevel)
 	}
+
+	logger.WithFields(logrus.Fields{
+		"health_check": *healthCheck,
+		"exec_script":  *execScript,
+		"script_query": *scriptQuery,
+	}).Debug("Command flags parsed")
 
 	// Validate required parameters
 	if *address == "" {
@@ -95,7 +103,17 @@ func main() {
 			logger.WithError(err).Fatal("Health check failed")
 		}
 		logger.Info("Health check passed successfully!")
+	} else if *execScript {
+		if *scriptQuery == "" {
+			logger.Fatal("Script query is required. Use --script-query flag")
+		}
+		logger.Info("Executing PxL script...")
+		err := client.ExecuteScript(ctx, *clusterID, *scriptQuery)
+		if err != nil {
+			logger.WithError(err).Fatal("Script execution failed")
+		}
+		logger.Info("Script execution completed!")
 	} else {
-		logger.Info("No action specified. Use --health-check to test connection")
+		logger.Info("No action specified. Use --health-check to test connection or --exec-script to execute scripts")
 	}
 }

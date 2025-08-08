@@ -43,7 +43,7 @@ message HealthCheckResponse {
 message ExecuteScriptRequest {
   // The PxL script to execute
   string query_str = 1;
-  // The cluster ID
+  // The cluster ID (field number must match Pixie's actual proto!)
   string cluster_id = 3;
   // Optional execution functions
   repeated QueryFunc exec_funcs = 4;

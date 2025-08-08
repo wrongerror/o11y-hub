@@ -196,6 +196,66 @@ func (c *Client) HealthCheck(ctx context.Context, clusterID string) error {
 	return nil
 }
 
+// ExecuteScript executes a simple PxL script on the Vizier cluster
+func (c *Client) ExecuteScript(ctx context.Context, clusterID, query string) error {
+	c.logger.WithFields(logrus.Fields{
+		"cluster_id": clusterID,
+		"query":      query[:min(100, len(query))], // Log first 100 chars
+	}).Info("Executing script")
+
+	// Create request
+	req := &pb.ExecuteScriptRequest{
+		ClusterId: clusterID,
+		QueryStr:  query,
+		Mutation:  false, // Default to non-mutation
+	}
+
+	// Add authentication to context
+	authCtx := c.getAuthenticatedContext(ctx)
+
+	// Execute the script
+	stream, err := c.client.ExecuteScript(authCtx, req)
+	if err != nil {
+		return fmt.Errorf("failed to execute script: %w", err)
+	}
+
+	c.logger.Info("Script executed successfully, stream created")
+	
+	// For now, just try to receive one response to see if the basic call works
+	resp, err := stream.Recv()
+	if err != nil {
+		if err == io.EOF {
+			c.logger.Info("Received EOF immediately")
+			return nil
+		}
+		return fmt.Errorf("failed to receive first response: %w", err)
+	}
+
+	c.logger.WithField("query_id", resp.QueryId).Info("Received first response")
+	
+	if resp.Status != nil {
+		c.logger.WithFields(logrus.Fields{
+			"status_code": resp.Status.ErrCode,
+			"status_msg":  resp.Status.Msg,
+		}).Info("Response status")
+		
+		if resp.Status.ErrCode != pb.Code_OK {
+			return fmt.Errorf("script execution failed: %s", resp.Status.Msg)
+		}
+	}
+
+	c.logger.Info("Script execution completed successfully")
+	return nil
+}
+
+// min helper function
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // WithTLS enables TLS
 func WithTLS(enabled bool) Option {
 	return func(c *Config) {
