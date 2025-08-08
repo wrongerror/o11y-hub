@@ -220,7 +220,7 @@ func (c *Client) ExecuteScript(ctx context.Context, clusterID, query string) err
 // processScriptResponses handles all responses from the ExecuteScript stream
 func (c *Client) processScriptResponses(stream pb.VizierService_ExecuteScriptClient) error {
 	responseCount := 0
-	
+
 	for {
 		resp, err := stream.Recv()
 		if err == io.EOF {
@@ -232,7 +232,7 @@ func (c *Client) processScriptResponses(stream pb.VizierService_ExecuteScriptCli
 		}
 
 		responseCount++
-		
+
 		// Handle first response
 		if responseCount == 1 {
 			c.logger.WithField("query_id", resp.QueryId).Info("Received first response")

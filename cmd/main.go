@@ -30,13 +30,13 @@ func main() {
 		skipVerify = flag.Bool("skip-verify", false, "Skip TLS verification")
 
 		// Action flags
-		healthCheck     = flag.Bool("health-check", false, "Perform health check")
-		execScript      = flag.Bool("exec-script", false, "Execute a PxL script")
-		scriptQuery     = flag.String("script-query", "", "PxL script query to execute")
-		builtinScript   = flag.String("builtin-script", "", "Execute a builtin script by name")
-		scriptParams    = flag.String("script-params", "", "Parameters for builtin script (key1=value1,key2=value2)")
-		listScripts     = flag.Bool("list-scripts", false, "List all available builtin scripts")
-		scriptHelp      = flag.String("script-help", "", "Show help for a specific builtin script")
+		healthCheck   = flag.Bool("health-check", false, "Perform health check")
+		execScript    = flag.Bool("exec-script", false, "Execute a PxL script")
+		scriptQuery   = flag.String("script-query", "", "PxL script query to execute")
+		builtinScript = flag.String("builtin-script", "", "Execute a builtin script by name")
+		scriptParams  = flag.String("script-params", "", "Parameters for builtin script (key1=value1,key2=value2)")
+		listScripts   = flag.Bool("list-scripts", false, "List all available builtin scripts")
+		scriptHelp    = flag.String("script-help", "", "Show help for a specific builtin script")
 
 		// Misc flags
 		verbose = flag.Bool("verbose", false, "Enable verbose logging")
@@ -158,7 +158,7 @@ func main() {
 			"script_name": *builtinScript,
 			"parameters":  params,
 		}).Info("Executing builtin script...")
-		
+
 		err := executor.ExecuteBuiltinScript(ctx, *clusterID, *builtinScript, params)
 		if err != nil {
 			logger.WithError(err).Fatal("Builtin script execution failed")
@@ -172,15 +172,15 @@ func main() {
 // Helper functions
 func listBuiltinScripts(executor *scripts.Executor) {
 	scriptInfos := executor.ListBuiltinScripts()
-	
+
 	fmt.Println("\nAvailable Builtin Scripts:")
 	fmt.Println("==========================")
-	
+
 	categories := make(map[string][]string)
 	for name, script := range scriptInfos {
 		categories[script.Category] = append(categories[script.Category], name)
 	}
-	
+
 	for category, scriptNames := range categories {
 		fmt.Printf("\n%s:\n", category)
 		for _, name := range scriptNames {
@@ -188,7 +188,7 @@ func listBuiltinScripts(executor *scripts.Executor) {
 			fmt.Printf("  %-20s %s\n", name, script.Description)
 		}
 	}
-	
+
 	fmt.Println("\nUse --script-help <script-name> for detailed help on a specific script.")
 }
 
@@ -198,11 +198,11 @@ func showScriptHelp(executor *scripts.Executor, scriptName string) {
 		fmt.Printf("Error: %v\n", err)
 		return
 	}
-	
+
 	fmt.Printf("\nScript: %s\n", info.Name)
 	fmt.Printf("Category: %s\n", info.Category)
 	fmt.Printf("Description: %s\n\n", info.Description)
-	
+
 	if len(info.Parameters) > 0 {
 		fmt.Println("Parameters:")
 		for _, param := range info.Parameters {
@@ -217,7 +217,7 @@ func showScriptHelp(executor *scripts.Executor, scriptName string) {
 			fmt.Printf("  %-15s %s%s%s\n", param.Name, param.Description, required, defaultVal)
 		}
 	}
-	
+
 	fmt.Printf("\nExample usage:\n")
 	fmt.Printf("  --builtin-script %s", scriptName)
 	if len(info.Parameters) > 0 {
@@ -231,7 +231,7 @@ func parseScriptParams(paramStr string) map[string]string {
 	if paramStr == "" {
 		return params
 	}
-	
+
 	pairs := strings.Split(paramStr, ",")
 	for _, pair := range pairs {
 		parts := strings.SplitN(pair, "=", 2)
@@ -239,6 +239,6 @@ func parseScriptParams(paramStr string) map[string]string {
 			params[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
 		}
 	}
-	
+
 	return params
 }

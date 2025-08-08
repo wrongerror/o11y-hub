@@ -52,7 +52,7 @@ func (e *Executor) ExecuteBuiltinScript(ctx context.Context, clusterID, scriptNa
 // ListBuiltinScripts returns information about all available builtin scripts
 func (e *Executor) ListBuiltinScripts() map[string]ScriptInfo {
 	result := make(map[string]ScriptInfo)
-	
+
 	for name, script := range BuiltinScripts {
 		result[name] = ScriptInfo{
 			Name:        script.Name,
@@ -61,7 +61,7 @@ func (e *Executor) ListBuiltinScripts() map[string]ScriptInfo {
 			Parameters:  script.Parameters,
 		}
 	}
-	
+
 	return result
 }
 

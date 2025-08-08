@@ -48,9 +48,9 @@ observo-connector/
 │   └── vizier/
 │       └── client.go       # Vizier客户端，支持数据提取
 ├── proto/
-│   ├── vizierapi.proto     # Vizier API定义
-│   ├── vizierapi.pb.go     # 生成的protobuf代码
-│   └── vizierapi_grpc.pb.go # 生成的gRPC代码
+│   ├── vizierapi_simple.proto     # Vizier API定义
+│   ├── vizierapi_simple.pb.go     # 生成的protobuf代码
+│   └── vizierapi_simple_grpc.pb.go # 生成的gRPC代码
 ├── certs/                  # 证书文件目录
 ├── config.example.yaml     # 配置文件示例
 ├── go.mod

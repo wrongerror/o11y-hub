@@ -26,12 +26,12 @@ type Parameter struct {
 // Execute renders the script template with provided parameters
 func (st *ScriptTemplate) Execute(params map[string]string) (string, error) {
 	script := st.Template
-	
+
 	// Replace parameters in template
 	for _, param := range st.Parameters {
 		placeholder := fmt.Sprintf("{{%s}}", param.Name)
 		value := params[param.Name]
-		
+
 		// Use default value if parameter not provided
 		if value == "" {
 			if param.Required {
@@ -39,10 +39,10 @@ func (st *ScriptTemplate) Execute(params map[string]string) (string, error) {
 			}
 			value = param.DefaultValue
 		}
-		
+
 		script = strings.ReplaceAll(script, placeholder, value)
 	}
-	
+
 	return script, nil
 }
 
@@ -70,11 +70,11 @@ px.display(df)`,
 			{Name: "start_time", Type: "string", Description: "Start time for the query", DefaultValue: "-5m", Required: true},
 		},
 	},
-	
+
 	"resource_usage": {
 		Name:        "Resource Usage",
 		Description: "Monitor CPU and memory usage by pod and namespace",
-		Category:    "Infrastructure", 
+		Category:    "Infrastructure",
 		Template: `import px
 
 df = px.DataFrame('process_stats', start_time='{{start_time}}')
@@ -132,7 +132,7 @@ px.display(df[['namespace', 'pod', 'rx_bytes_mb', 'tx_bytes_mb', 'rx_packets', '
 	},
 
 	"pod_overview": {
-		Name:        "Pod Overview", 
+		Name:        "Pod Overview",
 		Description: "Comprehensive overview of a specific pod including resources and network",
 		Category:    "Infrastructure",
 		Template: `import px
