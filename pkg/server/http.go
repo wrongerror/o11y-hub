@@ -12,28 +12,39 @@ import (
 
 	"github.com/wrongerror/observo-connector/pkg/common"
 	"github.com/wrongerror/observo-connector/pkg/export"
+	"github.com/wrongerror/observo-connector/pkg/metrics"
+	"github.com/wrongerror/observo-connector/pkg/scripts"
 	"github.com/wrongerror/observo-connector/pkg/vizier"
 )
 
 // Server HTTP服务器
 type Server struct {
-	router        *mux.Router
-	logger        *logrus.Logger
-	vizierClient  *vizier.Client
-	exportFactory *export.ExporterFactory
-	dataConverter *export.DataConverter
-	port          int
+	router           *mux.Router
+	logger           *logrus.Logger
+	vizierClient     *vizier.Client
+	exportFactory    *export.ExporterFactory
+	dataConverter    *export.DataConverter
+	scriptExecutor   *scripts.Executor
+	metricsConverter *metrics.PrometheusConverter
+	port             int
+	defaultClusterID string
 }
 
 // NewServer 创建新的HTTP服务器
-func NewServer(port int, vizierClient *vizier.Client) *Server {
+func NewServer(port int, vizierClient *vizier.Client, defaultClusterID string) *Server {
+	logger := logrus.New()
+	scriptExecutor := scripts.NewExecutor(vizierClient, logger)
+	
 	s := &Server{
-		router:        mux.NewRouter(),
-		logger:        logrus.New(),
-		vizierClient:  vizierClient,
-		exportFactory: export.NewExporterFactory(),
-		dataConverter: export.NewDataConverter(),
-		port:          port,
+		router:           mux.NewRouter(),
+		logger:           logger,
+		vizierClient:     vizierClient,
+		exportFactory:    export.NewExporterFactory(),
+		dataConverter:    export.NewDataConverter(),
+		scriptExecutor:   scriptExecutor,
+		metricsConverter: metrics.NewPrometheusConverter(),
+		port:             port,
+		defaultClusterID: defaultClusterID,
 	}
 
 	s.setupRoutes()
@@ -195,31 +206,83 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // handleMetrics 处理Prometheus metrics请求
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("query")
 	clusterID := r.URL.Query().Get("cluster_id")
-
-	if query == "" {
-		// 如果没有指定查询，返回默认的内部指标
-		s.writeDefaultMetrics(w)
-		return
+	if clusterID == "" {
+		clusterID = s.defaultClusterID
 	}
-
+	
 	if clusterID == "" {
 		s.writeErrorResponse(w, http.StatusBadRequest, "Cluster ID parameter is required")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	scriptName := r.URL.Query().Get("script")
+	
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 
-	result, err := s.executeQuery(ctx, query, clusterID)
-	if err != nil {
-		s.writeErrorResponse(w, http.StatusInternalServerError, err.Error())
-		return
+	var results []*common.QueryResult
+	var err error
+
+	if scriptName != "" {
+		// Execute specific script
+		result, execErr := s.scriptExecutor.ExecuteBuiltinScriptForMetrics(ctx, clusterID, scriptName, map[string]string{
+			"start_time": r.URL.Query().Get("start_time"),
+			"namespace":  r.URL.Query().Get("namespace"),
+			"pod_name":   r.URL.Query().Get("pod_name"),
+		})
+		if execErr != nil {
+			s.writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to execute script '%s': %v", scriptName, execErr))
+			return
+		}
+		if result != nil {
+			results = []*common.QueryResult{result}
+		}
+	} else {
+		// Execute all metric scripts
+		results, err = s.scriptExecutor.ExecuteAllMetricScripts(ctx, clusterID)
+		if err != nil {
+			s.writeErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to execute scripts: %v", err))
+			return
+		}
 	}
 
-	// 转换为Prometheus格式
-	s.handleExportResponse(w, result, common.FormatPrometheusText, common.ExportOptions{})
+	// Convert to Prometheus metrics
+	prometheusMetrics := s.metricsConverter.ConvertToMetrics(results)
+	
+	// Add server metrics
+	prometheusMetrics = append(prometheusMetrics, s.getServerMetrics()...)
+
+	// Create result with metrics
+	queryResult := &common.QueryResult{
+		Metrics:   prometheusMetrics,
+		Timestamp: time.Now(),
+	}
+
+	// Export as Prometheus format
+	s.handleExportResponse(w, queryResult, common.FormatPrometheusText, common.ExportOptions{})
+}
+
+// getServerMetrics returns basic server health metrics
+func (s *Server) getServerMetrics() []common.Metric {
+	now := time.Now()
+	return []common.Metric{
+		{
+			Name:        "observo_connector_up",
+			Type:        common.MetricTypeGauge,
+			Description: "Whether the connector is up",
+			Value:       1,
+			Timestamp:   now,
+		},
+		{
+			Name:        "observo_connector_build_info",
+			Type:        common.MetricTypeGauge,
+			Description: "Build information",
+			Labels:      map[string]string{"version": "dev"},
+			Value:       1,
+			Timestamp:   now,
+		},
+	}
 }
 
 // executeQuery 执行查询
@@ -229,28 +292,10 @@ func (s *Server) executeQuery(ctx context.Context, query, clusterID string) (*co
 		"cluster_id": clusterID,
 	}).Info("Executing query")
 
-	// TODO: Implement ExecuteScriptAndExtractData method
-	return nil, fmt.Errorf("ExecuteScriptAndExtractData not implemented yet")
-}
-
-// writeDefaultMetrics 写入默认指标
-func (s *Server) writeDefaultMetrics(w http.ResponseWriter) {
-	metrics := `# HELP observo_connector_queries_total Total number of queries executed
-# TYPE observo_connector_queries_total counter
-observo_connector_queries_total 0
-
-# HELP observo_connector_up Whether the connector is up
-# TYPE observo_connector_up gauge
-observo_connector_up 1
-
-# HELP observo_connector_build_info Build information
-# TYPE observo_connector_build_info gauge
-observo_connector_build_info{version="dev"} 1
-`
-
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(metrics))
+	// Use the script executor for query execution
+	return s.scriptExecutor.ExecuteBuiltinScriptForMetrics(ctx, clusterID, "custom", map[string]string{
+		"query": query,
+	})
 }
 
 // handleExport 处理导出请求

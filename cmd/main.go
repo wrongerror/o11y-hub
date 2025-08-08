@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/wrongerror/observo-connector/pkg/scripts"
+	"github.com/wrongerror/observo-connector/pkg/server"
 	"github.com/wrongerror/observo-connector/pkg/vizier"
 )
 
@@ -37,6 +38,8 @@ func main() {
 		scriptParams  = flag.String("script-params", "", "Parameters for builtin script (key1=value1,key2=value2)")
 		listScripts   = flag.Bool("list-scripts", false, "List all available builtin scripts")
 		scriptHelp    = flag.String("script-help", "", "Show help for a specific builtin script")
+		startServer   = flag.Bool("server", false, "Start HTTP server for metrics and API endpoints")
+		serverPort    = flag.Int("port", 8080, "HTTP server port")
 
 		// Misc flags
 		verbose = flag.Bool("verbose", false, "Enable verbose logging")
@@ -164,8 +167,19 @@ func main() {
 			logger.WithError(err).Fatal("Builtin script execution failed")
 		}
 		logger.Info("Builtin script execution completed!")
+	} else if *startServer {
+		// Start HTTP server
+		logger.WithFields(logrus.Fields{
+			"port":       *serverPort,
+			"cluster_id": *clusterID,
+		}).Info("Starting HTTP server...")
+
+		httpServer := server.NewServer(*serverPort, client, *clusterID)
+		if err := httpServer.Start(); err != nil {
+			logger.WithError(err).Fatal("Failed to start HTTP server")
+		}
 	} else {
-		logger.Info("No action specified. Use --health-check, --exec-script, --builtin-script, or --list-scripts")
+		logger.Info("No action specified. Use --health-check, --exec-script, --builtin-script, --server, or --list-scripts")
 	}
 }
 

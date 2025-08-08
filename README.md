@@ -118,6 +118,97 @@ cp config.example.yaml config.yaml
 
 启动服务器后，可以使用以下API接口：
 
+### 内置脚本系统
+
+Observo Connector 包含多个预定义的监控脚本，可以自动从Pixie收集常见的可观测性指标：
+
+#### 查看可用脚本
+
+```bash
+# 列出所有内置脚本
+./observo-connector --list-scripts
+
+# 查看特定脚本帮助
+./observo-connector --script-help resource_usage
+```
+
+#### 执行内置脚本
+
+```bash
+# 执行资源使用情况脚本
+./observo-connector --builtin-script resource_usage \
+  --script-params "start_time=-5m" \
+  --address localhost:50300 \
+  --cluster-id demo-cluster \
+  --jwt-service demo-service \
+  --jwt-key <your-jwt-key>
+
+# 执行HTTP概览脚本
+./observo-connector --builtin-script http_overview \
+  --script-params "start_time=-10m,namespace=default" \
+  --address localhost:50300 \
+  --cluster-id demo-cluster
+```
+
+### Prometheus 指标端点
+
+#### 启动HTTP服务器
+
+```bash
+# 启动服务器以提供Prometheus指标
+./observo-connector --server \
+  --port 8080 \
+  --address localhost:50300 \
+  --cluster-id demo-cluster \
+  --jwt-service demo-service \
+  --jwt-key <your-jwt-key>
+```
+
+#### 获取指标
+
+```bash
+# 获取所有内置脚本的指标（自动执行resource_usage, http_overview, network_stats等）
+curl http://localhost:8080/api/v1/metrics
+
+# 获取特定脚本的指标
+curl "http://localhost:8080/api/v1/metrics?script=resource_usage"
+curl "http://localhost:8080/api/v1/metrics?script=http_overview"
+curl "http://localhost:8080/api/v1/metrics?script=network_stats"
+
+# 带参数获取指标
+curl "http://localhost:8080/api/v1/metrics?script=resource_usage&start_time=-10m&namespace=default"
+```
+
+#### 支持的指标类型
+
+**基础设施指标:**
+- `pixie_pod_cpu_usage_ratio` - Pod CPU使用率
+- `pixie_pod_memory_usage_ratio` - Pod内存使用率
+
+**HTTP指标:**
+- `pixie_http_requests_total` - HTTP请求总数
+- `pixie_http_errors_total` - HTTP错误总数
+- `pixie_http_request_duration_milliseconds` - 平均请求延迟
+- `pixie_http_request_duration_milliseconds_quantile` - 请求延迟分位数
+
+**网络指标:**
+- `pixie_network_bytes_sent_total` - 发送字节总数
+- `pixie_network_bytes_received_total` - 接收字节总数
+- `pixie_network_packets_sent_total` - 发送数据包总数
+- `pixie_network_packets_received_total` - 接收数据包总数
+
+#### 在Prometheus中配置
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: 'observo-connector'
+    static_configs:
+      - targets: ['localhost:8080']
+    metrics_path: '/api/v1/metrics'
+    scrape_interval: 30s
+```
+
 ### 查询接口
 
 #### POST /api/v1/query

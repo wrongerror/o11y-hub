@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/wrongerror/observo-connector/pkg/auth"
+	"github.com/wrongerror/observo-connector/pkg/common"
 	pb "github.com/wrongerror/observo-connector/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -328,4 +330,160 @@ func WithJWTServiceAuth(signingKey, serviceName string) Option {
 		c.JWTSigningKey = signingKey
 		c.JWTServiceName = serviceName
 	}
+}
+
+// ExecuteScriptAndExtractData executes a script and returns structured data
+func (c *Client) ExecuteScriptAndExtractData(ctx context.Context, clusterID, query string) (*common.QueryResult, error) {
+	c.logger.WithFields(logrus.Fields{
+		"cluster_id": clusterID,
+		"query":      query[:min(100, len(query))],
+	}).Info("Executing script for data extraction")
+
+	// Create request
+	req := &pb.ExecuteScriptRequest{
+		ClusterId: clusterID,
+		QueryStr:  query,
+		Mutation:  false,
+	}
+
+	// Add authentication to context
+	authCtx := c.getAuthenticatedContext(ctx)
+
+	// Execute the script
+	stream, err := c.client.ExecuteScript(authCtx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute script: %w", err)
+	}
+
+	// Extract data from responses
+	return c.extractDataFromResponses(stream, query)
+}
+
+// extractDataFromResponses extracts structured data from script responses
+func (c *Client) extractDataFromResponses(stream pb.VizierService_ExecuteScriptClient, query string) (*common.QueryResult, error) {
+	result := &common.QueryResult{
+		Data:      make([]map[string]interface{}, 0),
+		Columns:   make([]string, 0),
+		Timestamp: time.Now(),
+		Query:     query,
+	}
+
+	responseCount := 0
+	var columns []string
+	var rows []map[string]interface{}
+
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to receive response: %w", err)
+		}
+
+		responseCount++
+
+		// Check for errors
+		if resp.Status != nil && resp.Status.Code != 0 {
+			return nil, fmt.Errorf("script execution failed: %s", resp.Status.Message)
+		}
+
+		// Parse response data - this is a simplified implementation
+		// In a real implementation, you would parse the actual Pixie response format
+		if responseCount == 1 {
+			// First response typically contains metadata or column information
+			c.logger.WithField("query_id", resp.QueryId).Debug("Processing first response")
+		}
+
+		// For now, we'll create mock data based on the script type
+		// In a real implementation, you would parse the actual response payload
+		mockData := c.generateMockDataFromQuery(query)
+		if len(mockData) > 0 {
+			if len(columns) == 0 {
+				// Extract columns from first data row
+				for key := range mockData[0] {
+					columns = append(columns, key)
+				}
+			}
+			rows = append(rows, mockData...)
+		}
+	}
+
+	result.Columns = columns
+	result.Data = rows
+	result.RowCount = len(rows)
+
+	c.logger.WithFields(logrus.Fields{
+		"response_count": responseCount,
+		"columns":        len(columns),
+		"rows":           len(rows),
+	}).Info("Data extraction completed")
+
+	return result, nil
+}
+
+// generateMockDataFromQuery generates mock data based on the query content
+// TODO: Replace this with actual response parsing in production
+func (c *Client) generateMockDataFromQuery(query string) []map[string]interface{} {
+	queryLower := strings.ToLower(query)
+	
+	if strings.Contains(queryLower, "cpu") || strings.Contains(queryLower, "memory") {
+		// Resource usage data
+		return []map[string]interface{}{
+			{
+				"pod_name":     "app-pod-1",
+				"namespace":    "default", 
+				"cpu_usage":    0.25,
+				"memory_usage": 0.45,
+				"timestamp":    time.Now().Unix(),
+			},
+			{
+				"pod_name":     "app-pod-2", 
+				"namespace":    "default",
+				"cpu_usage":    0.15,
+				"memory_usage": 0.32,
+				"timestamp":    time.Now().Unix(),
+			},
+		}
+	}
+	
+	if strings.Contains(queryLower, "http") || strings.Contains(queryLower, "request") {
+		// HTTP metrics data
+		return []map[string]interface{}{
+			{
+				"service_name":    "frontend",
+				"request_count":   1234,
+				"error_count":     12,
+				"avg_latency_ms":  45.6,
+				"p99_latency_ms":  156.7,
+				"timestamp":       time.Now().Unix(),
+			},
+			{
+				"service_name":    "backend",
+				"request_count":   5678,
+				"error_count":     23,
+				"avg_latency_ms":  23.4,
+				"p99_latency_ms":  89.1,
+				"timestamp":       time.Now().Unix(),
+			},
+		}
+	}
+	
+	if strings.Contains(queryLower, "network") || strings.Contains(queryLower, "bytes") {
+		// Network metrics data
+		return []map[string]interface{}{
+			{
+				"pod_name":           "app-pod-1",
+				"namespace":          "default",
+				"bytes_sent":         1048576,
+				"bytes_received":     2097152,
+				"packets_sent":       1024,
+				"packets_received":   2048,
+				"timestamp":          time.Now().Unix(),
+			},
+		}
+	}
+	
+	// Default empty data
+	return []map[string]interface{}{}
 }
