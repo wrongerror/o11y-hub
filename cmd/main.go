@@ -21,6 +21,7 @@ func main() {
 		jwtOrgID   = flag.String("jwt-org-id", "", "JWT organization ID")
 		jwtEmail   = flag.String("jwt-email", "", "JWT email")
 		jwtService = flag.String("jwt-service", "", "JWT service name (for service auth)")
+		apiKey     = flag.String("api-key", "", "Direct Pixie API key")
 
 		// TLS flags
 		tlsEnabled = flag.Bool("tls", true, "Enable TLS")
@@ -59,9 +60,10 @@ func main() {
 
 	// Validate authentication
 	hasJWT := *jwtKey != ""
+	hasAPIKey := *apiKey != ""
 
-	if !hasJWT {
-		logger.Fatal("JWT authentication is required. Use --jwt-key flag")
+	if !hasJWT && !hasAPIKey && *address != "localhost:50300" {
+		logger.Fatal("Authentication is required. Use --jwt-key or --api-key flag")
 	}
 
 	// Build client options
@@ -83,6 +85,8 @@ func main() {
 			}
 			opts = append(opts, vizier.WithJWTAuth(*jwtKey, *jwtUserID, *jwtOrgID, *jwtEmail))
 		}
+	} else if hasAPIKey {
+		opts = append(opts, vizier.WithDirectVizierKey(*apiKey))
 	}
 
 	// Create client

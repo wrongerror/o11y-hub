@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package px.api.vizierpb;
+
+option go_package = "github.com/wrongerror/observo-connector/proto";
+
+// Simple but accurate status - using int32 like Pixie
+message Status {
+  int32 code = 1;
+  string message = 2;
+}
+
+// Minimal but accurate ExecuteScriptRequest  
+message ExecuteScriptRequest {
+  string query_str = 1;
+  string cluster_id = 3;  // Field 3 like Pixie
+  bool mutation = 5;      // Field 5 like Pixie
+}
+
+// Minimal but accurate ExecuteScriptResponse
+message ExecuteScriptResponse {
+  Status status = 1;
+  string query_id = 2;
+}
+
+// Health check messages
+message HealthCheckRequest {
+  string cluster_id = 1;
+}
+
+message HealthCheckResponse {
+  Status status = 1;
+}
+
+// VizierService
+service VizierService {
+  rpc HealthCheck(HealthCheckRequest) returns (stream HealthCheckResponse);
+  rpc ExecuteScript(ExecuteScriptRequest) returns (stream ExecuteScriptResponse);
+}

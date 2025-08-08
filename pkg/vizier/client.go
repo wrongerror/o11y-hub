@@ -6,7 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -72,7 +72,7 @@ func NewClient(address string, logger *logrus.Logger, opts ...Option) (*Client, 
 
 		// Load CA certificate if provided
 		if config.CACert != "" {
-			caCert, err := ioutil.ReadFile(config.CACert)
+			caCert, err := os.ReadFile(config.CACert)
 			if err != nil {
 				return nil, fmt.Errorf("failed to read CA certificate: %w", err)
 			}
@@ -96,7 +96,7 @@ func NewClient(address string, logger *logrus.Logger, opts ...Option) (*Client, 
 	}
 
 	// Create gRPC connection
-	conn, err := grpc.Dial(address, grpc.WithTransportCredentials(creds))
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to %s: %w", address, err)
 	}
@@ -155,7 +155,7 @@ func (c *Client) getAuthenticatedContext(ctx context.Context) context.Context {
 
 	// Add direct Vizier key if configured
 	if c.config.DirectVizierKey != "" {
-		md.Set("pixie-api-key", c.config.DirectVizierKey)
+		md.Set("authorization", "Bearer "+c.config.DirectVizierKey)
 	}
 
 	return metadata.NewOutgoingContext(ctx, md)
@@ -183,12 +183,12 @@ func (c *Client) HealthCheck(ctx context.Context, clusterID string) error {
 	}
 
 	if resp != nil && resp.Status != nil {
-		if resp.Status.ErrCode != pb.Code_OK {
+		if resp.Status.Code != 0 { // 0 is OK status
 			c.logger.WithFields(logrus.Fields{
-				"code":    resp.Status.ErrCode,
-				"message": resp.Status.Msg,
+				"code":    resp.Status.Code,
+				"message": resp.Status.Message,
 			}).Error("Health check failed")
-			return fmt.Errorf("health check failed: %s", resp.Status.Msg)
+			return fmt.Errorf("health check failed: %s", resp.Status.Message)
 		}
 	}
 
@@ -220,7 +220,7 @@ func (c *Client) ExecuteScript(ctx context.Context, clusterID, query string) err
 	}
 
 	c.logger.Info("Script executed successfully, stream created")
-	
+
 	// For now, just try to receive one response to see if the basic call works
 	resp, err := stream.Recv()
 	if err != nil {
@@ -232,15 +232,15 @@ func (c *Client) ExecuteScript(ctx context.Context, clusterID, query string) err
 	}
 
 	c.logger.WithField("query_id", resp.QueryId).Info("Received first response")
-	
+
 	if resp.Status != nil {
 		c.logger.WithFields(logrus.Fields{
-			"status_code": resp.Status.ErrCode,
-			"status_msg":  resp.Status.Msg,
+			"status_code": resp.Status.Code,
+			"status_msg":  resp.Status.Message,
 		}).Info("Response status")
-		
-		if resp.Status.ErrCode != pb.Code_OK {
-			return fmt.Errorf("script execution failed: %s", resp.Status.Msg)
+
+		if resp.Status.Code != 0 { // 0 is OK status
+			return fmt.Errorf("script execution failed: %s", resp.Status.Message)
 		}
 	}
 
