@@ -42,9 +42,6 @@ type Config struct {
 	JWTOrgID       string
 	JWTEmail       string
 	JWTServiceName string
-
-	// Direct Vizier options
-	DirectVizierKey string
 }
 
 // Option represents a configuration option
@@ -151,11 +148,6 @@ func (c *Client) getAuthenticatedContext(ctx context.Context) context.Context {
 		} else {
 			md.Set("authorization", "Bearer "+token)
 		}
-	}
-
-	// Add direct Vizier key if configured
-	if c.config.DirectVizierKey != "" {
-		md.Set("authorization", "Bearer "+c.config.DirectVizierKey)
 	}
 
 	return metadata.NewOutgoingContext(ctx, md)
@@ -307,12 +299,5 @@ func WithJWTServiceAuth(signingKey, serviceName string) Option {
 	return func(c *Config) {
 		c.JWTSigningKey = signingKey
 		c.JWTServiceName = serviceName
-	}
-}
-
-// WithDirectVizierKey configures direct Vizier key authentication
-func WithDirectVizierKey(key string) Option {
-	return func(c *Config) {
-		c.DirectVizierKey = key
 	}
 }
