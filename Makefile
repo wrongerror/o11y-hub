@@ -1,9 +1,8 @@
-.PHONY: proto build clean run-query run-health run-server install-deps test mock-server demo demo-auto install uninstall fmt lint check setup-certs help dev release
+.PHONY: proto build clean run-query run-health run-server install-deps test install uninstall fmt lint check setup-certs help dev release
 
 # Variables
 PROTO_DIR = proto
 BINARY_NAME = observo-connector
-MOCK_SERVER = mock-server
 SERVER_PORT = 8080
 
 # Default target
@@ -27,18 +26,10 @@ build: proto
 	@echo "Building $(BINARY_NAME)..."
 	go build -o $(BINARY_NAME) ./cmd
 
-# Build mock server
-mock-server:
-	@echo "Building $(MOCK_SERVER)..."
-	go build -o $(MOCK_SERVER) ./cmd/mock-server
-
-# Build all binaries
-build-all: build mock-server
-
 # Clean generated files and binaries
 clean:
 	@echo "Cleaning..."
-	rm -f $(BINARY_NAME) $(MOCK_SERVER)
+	rm -f $(BINARY_NAME)
 	rm -f $(PROTO_DIR)/*.pb.go
 
 # Run tests
@@ -71,16 +62,6 @@ run-server: build
 		--address=localhost:50051 \
 		--disable-ssl
 
-# Run interactive demo
-demo: build
-	@echo "Starting interactive demo..."
-	./demo.sh
-
-# Run automatic demo
-demo-auto: build
-	@echo "Running automatic demo..."
-	./demo.sh --auto
-
 # Install observo-connector binary to system
 install: build
 	@echo "Installing $(BINARY_NAME) to /usr/local/bin..."
@@ -102,15 +83,12 @@ fmt:
 help:
 	@echo "Available commands:"
 	@echo "  make build         - Build the observo-connector binary"
-	@echo "  make build-all     - Build all binaries"
 	@echo "  make proto         - Generate protobuf code"
 	@echo "  make test          - Run tests"
 	@echo "  make clean         - Clean generated files"
 	@echo "  make run-query     - Run example query"
 	@echo "  make run-health    - Run health check"
 	@echo "  make run-server    - Start HTTP server"
-	@echo "  make demo          - Run interactive demo"
-	@echo "  make demo-auto     - Run automatic demo"
 	@echo "  make setup-certs   - Create certificates directory"
 	@echo "  make fmt           - Format code"
 	@echo "  make help          - Show this help"

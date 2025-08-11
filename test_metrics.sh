@@ -4,14 +4,16 @@
 
 echo "=== Observo Connector Prometheus Metrics Test ==="
 
-# Start the server in background (use demo values)
+# Start the server in background (use real Pixie values)
 echo "Starting HTTP server..."
 ./observo-connector --server \
   --port 8080 \
-  --address localhost:50300 \
+  --address vizier-query-broker-svc.pl.svc.cluster.local:50300 \
   --cluster-id demo-cluster \
   --jwt-service demo-service \
   --jwt-key c7144cb925767f9030ca5e6a2efb8bdc12e12ba0ff0bb5a88065e30dbeef6bc5 \
+  --tls=true \
+  --skip-verify=true \
   --verbose &
 
 SERVER_PID=$!

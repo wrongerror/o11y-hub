@@ -85,7 +85,7 @@ func main() {
 	// Validate authentication
 	hasJWT := *jwtKey != ""
 
-	if !hasJWT && *address != "localhost:50300" {
+	if !hasJWT {
 		logger.Fatal("Authentication is required. Use --jwt-key flag")
 	}
 

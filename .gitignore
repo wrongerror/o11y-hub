@@ -5,7 +5,6 @@
 *.so
 *.dylib
 observo-connector
-mock-server
 
 # Test binary, built with `go test -c`
 *.test

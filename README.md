@@ -32,9 +32,7 @@
 ```
 observo-connector/
 ├── cmd/
-│   ├── main.go              # 主程序入口，支持多种命令
-│   └── mock-server/
-│       └── main.go          # Mock服务器（用于测试）
+│   └── main.go              # 主程序入口，支持多种命令
 ├── pkg/
 │   ├── config/
 │   │   ├── tls.go          # TLS配置管理
@@ -55,7 +53,6 @@ observo-connector/
 ├── config.example.yaml     # 配置文件示例
 ├── go.mod
 ├── Makefile
-├── deploy.sh              # Kubernetes部署脚本
 ├── test.sh               # 测试脚本
 └── README.md
 ```
@@ -138,16 +135,20 @@ Observo Connector 包含多个预定义的监控脚本，可以自动从Pixie收
 # 执行资源使用情况脚本
 ./observo-connector --builtin-script resource_usage \
   --script-params "start_time=-5m" \
-  --address localhost:50300 \
+  --address vizier-query-broker-svc.pl.svc.cluster.local:50300 \
   --cluster-id demo-cluster \
   --jwt-service demo-service \
-  --jwt-key <your-jwt-key>
+  --jwt-key <your-jwt-key> \
+  --tls=true \
+  --skip-verify=true
 
 # 执行HTTP概览脚本
 ./observo-connector --builtin-script http_overview \
   --script-params "start_time=-10m,namespace=default" \
-  --address localhost:50300 \
-  --cluster-id demo-cluster
+  --address vizier-query-broker-svc.pl.svc.cluster.local:50300 \
+  --cluster-id demo-cluster \
+  --tls=true \
+  --skip-verify=true
 ```
 
 ### Prometheus 指标端点
@@ -158,8 +159,10 @@ Observo Connector 包含多个预定义的监控脚本，可以自动从Pixie收
 # 启动服务器以提供Prometheus指标
 ./observo-connector --server \
   --port 8080 \
-  --address localhost:50300 \
+  --address vizier-query-broker-svc.pl.svc.cluster.local:50300 \
   --cluster-id demo-cluster \
+  --tls=true \
+  --skip-verify=true \
   --jwt-service demo-service \
   --jwt-key <your-jwt-key>
 ```
@@ -360,10 +363,7 @@ connector自动将Pixie查询结果转换为标准化格式：
 ### Kubernetes部署
 
 ```bash
-# 使用提供的部署脚本
-./deploy.sh
-
-# 或手动部署
+# 手动部署（需要自己准备k8s manifests）
 kubectl apply -f k8s/
 ```
 
@@ -495,13 +495,13 @@ go build -o observo-connector ./cmd
 # 健康检查
 ./observo-connector health \
     --cluster-id=your-cluster-id \
-    --address=vizier.pixie.svc.cluster.local:51400 \
+    --address=vizier.pixie.svc.cluster.local:50300 \
     --skip-verify=true
 
 # 执行PxL查询
 ./observo-connector query "df.head(5)" \
     --cluster-id=your-cluster-id \
-    --address=vizier.pixie.svc.cluster.local:51400 \
+    --address=vizier.pixie.svc.cluster.local:50300 \
     --skip-verify=true
 ```
 
@@ -510,14 +510,14 @@ go build -o observo-connector ./cmd
 ### 开发环境（跳过验证）
 ```bash
 ./observo-connector query "df.head(5)" \
-    --address=vizier.example.com:51400 \
+    --address=vizier.example.com:50300 \
     --skip-verify=true
 ```
 
 ### 生产环境（完整TLS验证）
 ```bash
 ./observo-connector query "df.head(5)" \
-    --address=vizier.example.com:51400 \
+    --address=vizier.example.com:50300 \
     --ca-cert=certs/ca.crt \
     --client-cert=certs/client.crt \
     --client-key=certs/client.key \
@@ -528,27 +528,18 @@ go build -o observo-connector ./cmd
 
 ### 本地测试
 ```bash
-# 启动mock服务器
-./mock-server &
-
-# 运行测试
+# 运行基础功能测试
 make test
 
-# 清理
-pkill -f mock-server
-```
-
-### 容器测试
-```bash
-# 构建并测试
-make test-mock
+# 运行测试脚本
+./test.sh
 ```
 
 ## Kubernetes部署
 
 ```bash
-# 部署到Kubernetes
-./deploy.sh
+# 使用kubectl直接部署（需要准备manifests）
+kubectl apply -f k8s/
 
 # 验证部署
 kubectl get pods -n observo
