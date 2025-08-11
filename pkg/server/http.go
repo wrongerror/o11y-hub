@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -408,11 +409,23 @@ func (s *Server) handleExecuteScript(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	err := s.vizierClient.ExecuteScript(ctx, clusterID, req.Script)
-	if err != nil {
-		s.logger.WithError(err).Error("Failed to execute script")
-		http.Error(w, fmt.Sprintf("Script execution failed: %v", err), http.StatusInternalServerError)
-		return
+	// Check if this is a script name (builtin or file-based) or raw PxL code
+	if s.isScriptName(req.Script) {
+		// Execute as a named script with parameters
+		err := s.scriptExecutor.ExecuteBuiltinScript(ctx, clusterID, req.Script, req.Params)
+		if err != nil {
+			s.logger.WithError(err).Error("Failed to execute script")
+			http.Error(w, fmt.Sprintf("Script execution failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// Execute as raw PxL code
+		err := s.vizierClient.ExecuteScript(ctx, clusterID, req.Script)
+		if err != nil {
+			s.logger.WithError(err).Error("Failed to execute script")
+			http.Error(w, fmt.Sprintf("Script execution failed: %v", err), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -420,6 +433,12 @@ func (s *Server) handleExecuteScript(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"message": "Script executed successfully",
 	})
+}
+
+// isScriptName checks if the provided string is a script name (not raw PxL code)
+func (s *Server) isScriptName(script string) bool {
+	// Simple heuristic: if it doesn't contain newlines or 'import', it's likely a script name
+	return !strings.Contains(script, "\n") && !strings.Contains(script, "import")
 }
 
 // handleListScripts 处理列出脚本请求 - 简化版本

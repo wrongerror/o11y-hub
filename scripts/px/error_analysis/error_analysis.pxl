@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""
+Error Analysis Script
+
+Analyze HTTP errors and failure patterns across services.
+"""
+
+import px
+
+
+def error_analysis(start_time: str, namespace: str = "", service: str = "", min_status_code: int = 400):
+    """
+    Analyze HTTP errors and failure patterns.
+    
+    Args:
+        start_time: Start time for the query (e.g., "-10m")
+        namespace: Kubernetes namespace to filter (optional)
+        service: Service name to filter (optional)
+        min_status_code: Minimum HTTP status code to consider as error (default: 400)
+    """
+    
+    # Get HTTP events
+    df = px.DataFrame('http_events', start_time=start_time)
+    
+    # Add context
+    df.service = df.ctx['service']
+    df.namespace = df.ctx['namespace']
+    df.pod = df.ctx['pod']
+    
+    # Apply filters if provided
+    if namespace:
+        df = df[df.namespace == namespace]
+    if service:
+        df = df[df.service == service]
+    
+    # Filter to only error responses
+    df = df[df.resp_status >= min_status_code]
+    
+    # Convert latency to milliseconds
+    df.latency_ms = df.latency / 1000000
+    
+    # Analyze error patterns by service and status code
+    error_summary = df.groupby(['namespace', 'service', 'resp_status']).agg(
+        error_count=('latency', px.count),
+        avg_latency_ms=('latency_ms', px.mean),
+        max_latency_ms=('latency_ms', px.max),
+        unique_paths=('req_path', lambda x: px.distinct_count(x)),
+        sample_path=('req_path', lambda x: px.any(x))
+    )
+    
+    # Sort by error count
+    error_summary = error_summary.orderby(['error_count'], ascending=[False])
+    
+    px.display(error_summary, 'Error Analysis by Service and Status Code')
+    
+    # Analyze error patterns by path
+    path_errors = df.groupby(['namespace', 'service', 'req_path', 'resp_status']).agg(
+        error_count=('latency', px.count),
+        avg_latency_ms=('latency_ms', px.mean),
+        sample_method=('req_method', lambda x: px.any(x))
+    )
+    
+    path_errors = path_errors.orderby(['error_count'], ascending=[False]).head(50)
+    
+    px.display(path_errors, 'Error Analysis by Request Path')
+    
+    # Get recent error details
+    recent_errors = df[['time_', 'namespace', 'service', 'pod', 'req_method', 
+                       'req_path', 'resp_status', 'resp_message', 'latency_ms']].head(100)
+    recent_errors = recent_errors.orderby(['time_'], ascending=[False])
+    
+    px.display(recent_errors, 'Recent Error Details')
+    
+    # Error timeline
+    error_timeline = df.groupby(['time_']).agg(
+        total_errors=('latency', px.count),
+        avg_error_latency_ms=('latency_ms', px.mean),
+        unique_services=('service', lambda x: px.distinct_count(x))
+    )
+    
+    px.display(error_timeline, 'Error Timeline')
+    
+    # Error distribution by status code
+    status_distribution = df.groupby(['resp_status']).agg(
+        error_count=('latency', px.count),
+        avg_latency_ms=('latency_ms', px.mean),
+        affected_services=('service', lambda x: px.distinct_count(x))
+    )
+    
+    status_distribution = status_distribution.orderby(['error_count'], ascending=[False])
+    
+    px.display(status_distribution, 'Error Distribution by Status Code')
+    
+    # Service error rates (need to compare with total requests)
+    all_requests = px.DataFrame('http_events', start_time=start_time)
+    all_requests.service = all_requests.ctx['service']
+    all_requests.namespace = all_requests.ctx['namespace']
+    
+    if namespace:
+        all_requests = all_requests[all_requests.namespace == namespace]
+    if service:
+        all_requests = all_requests[all_requests.service == service]
+    
+    # Calculate error rates
+    total_by_service = all_requests.groupby(['namespace', 'service']).agg(
+        total_requests=('latency', px.count)
+    )
+    
+    errors_by_service = df.groupby(['namespace', 'service']).agg(
+        error_requests=('latency', px.count)
+    )
+    
+    # Join to calculate error rate
+    error_rates = total_by_service.merge(errors_by_service, 
+                                       left_on=['namespace', 'service'],
+                                       right_on=['namespace', 'service'],
+                                       how='left')
+    
+    # Fill missing error counts with 0
+    error_rates.error_requests = px.select(error_rates.error_requests.isna(), 0, error_rates.error_requests)
+    
+    # Calculate error rate percentage
+    error_rates.error_rate_percent = (error_rates.error_requests / error_rates.total_requests) * 100
+    
+    error_rates = error_rates.orderby(['error_rate_percent'], ascending=[False])
+    
+    px.display(error_rates, 'Service Error Rates')
+    
+    return error_summary
+
+
+# Main execution
+px.display(error_analysis(start_time, namespace, service, min_status_code))

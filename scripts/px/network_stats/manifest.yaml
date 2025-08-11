@@ -1,0 +1,29 @@
+---
+short: Network Statistics
+long: >
+  Monitor network traffic and connection statistics by pod and namespace.
+  Provides detailed network performance and connectivity analysis.
+
+category: Network
+tags:
+  - network
+  - traffic
+  - connectivity
+  - bandwidth
+
+parameters:
+  - name: start_time
+    type: string
+    description: "Start time for the query (e.g., -5m, -1h)"
+    default: "-5m"
+    required: true
+  - name: namespace
+    type: string
+    description: "Kubernetes namespace to filter (empty for all)"
+    default: ""
+    required: false
+  - name: pod
+    type: string
+    description: "Pod name to filter (empty for all)"
+    default: ""
+    required: false

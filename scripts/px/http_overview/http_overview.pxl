@@ -1,0 +1,30 @@
+import px
+
+# Get script parameters - these will be replaced by the script manager  
+start_time = "{{start_time}}"
+
+# Get HTTP events
+df = px.DataFrame('http_events', start_time=start_time)
+
+# Add service context
+df.service = df.ctx['service'] 
+df.namespace = df.ctx['namespace']
+df.pod = df.ctx['pod']
+
+# Calculate metrics
+df.error = df.resp_status >= 400
+df.latency_ms = df.latency / 1000000  # Convert to milliseconds
+
+# Aggregate by service
+service_stats = df.groupby(['namespace', 'service']).agg(
+    request_count=('latency', px.count),
+    avg_latency_ms=('latency_ms', px.mean),
+    error_rate=('error', px.mean),
+    error_count=('error', px.sum)
+)
+
+# Limit results without sorting first
+service_stats = service_stats.head(10)
+
+# Use px.display() to ensure execution
+px.display(service_stats, 'http_overview')

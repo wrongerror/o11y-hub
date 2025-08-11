@@ -4,23 +4,119 @@ package px.api.vizierpb;
 
 option go_package = "github.com/wrongerror/observo-connector/proto";
 
-// Simple but accurate status - using int32 like Pixie
+// Data types supported by the execution engine
+enum DataType {
+  DATA_TYPE_UNKNOWN = 0;
+  BOOLEAN = 1;
+  INT64 = 2;
+  UINT128 = 3;
+  FLOAT64 = 4;
+  STRING = 5;
+  TIME64NS = 6;
+}
+
+// Semantic types for formatting data
+enum SemanticType {
+  ST_UNSPECIFIED = 0;
+  ST_NONE = 1;
+  ST_TIME_NS = 2;
+  ST_SERVICE_NAME = 300;
+  ST_POD_NAME = 400;
+  ST_NAMESPACE_NAME = 700;
+  ST_BYTES = 800;
+  ST_PERCENT = 900;
+  ST_DURATION_NS = 901;
+}
+
+// Column definition
+message Column {
+  string column_name = 1;
+  DataType column_type = 2;
+  SemanticType column_semantic_type = 3;
+}
+
+// Table relation/schema
+message Relation {
+  repeated Column columns = 1;
+}
+
+// A single data value
+message Datum {
+  oneof val {
+    bool bool_value = 1;
+    int64 int64_value = 2;
+    double float64_value = 4;
+    string string_value = 5;
+    int64 time64_ns_value = 6;
+    // For UINT128, we'll use string representation for simplicity
+    string uint128_value = 7;
+  }
+}
+
+// A single row of data
+message RowBatchData {
+  string table_id = 1;
+  // Each sub-array represents a column, with each element being a row value
+  repeated Column cols = 2;
+  // Number of rows in this batch
+  int64 num_rows = 3;
+  // Each column's data as repeated values
+  map<string, ColumnData> columns = 4;
+  // End of stream indicator
+  bool eos = 5;
+}
+
+// Column data containing the actual values
+message ColumnData {
+  repeated Datum values = 1;
+}
+
+// Query metadata describing a table
+message QueryMetadata {
+  Relation relation = 1;
+  string name = 2;
+  string id = 3;
+}
+
+// Execution statistics
+message QueryExecutionStats {
+  // Execution time in nanoseconds
+  int64 execution_time_ns = 1;
+  // Compilation time in nanoseconds  
+  int64 compilation_time_ns = 2;
+  // Number of bytes processed
+  int64 bytes_processed = 3;
+  // Number of records processed
+  int64 records_processed = 4;
+}
+
+// Query data containing either row batch or execution stats
+message QueryData {
+  RowBatchData batch = 1;
+  QueryExecutionStats execution_stats = 2;
+}
+
+// Status message
 message Status {
   int32 code = 1;
   string message = 2;
 }
 
-// Minimal but accurate ExecuteScriptRequest  
+// Execute script request
 message ExecuteScriptRequest {
   string query_str = 1;
-  string cluster_id = 3;  // Field 3 like Pixie
-  bool mutation = 5;      // Field 5 like Pixie
+  string cluster_id = 3;
+  bool mutation = 5;
 }
 
-// Minimal but accurate ExecuteScriptResponse
+// Execute script response - now with data capability
 message ExecuteScriptResponse {
   Status status = 1;
   string query_id = 2;
+  oneof result {
+    QueryData data = 3;
+    QueryMetadata meta_data = 4;
+  }
 }
 
 // Health check messages

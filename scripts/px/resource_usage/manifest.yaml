@@ -1,0 +1,29 @@
+---
+short: Resource Usage
+long: >
+  Monitor CPU and memory usage by pod and namespace.
+  Provides detailed resource consumption analysis for infrastructure monitoring.
+
+category: Infrastructure
+tags:
+  - cpu
+  - memory
+  - resources
+  - pods
+
+parameters:
+  - name: start_time
+    type: string
+    description: "Start time for the query (e.g., -5m, -1h)"
+    default: "-5m"
+    required: true
+  - name: namespace
+    type: string
+    description: "Kubernetes namespace to filter (empty for all)"
+    default: ""
+    required: false
+  - name: pod
+    type: string
+    description: "Pod name to filter (empty for all)"
+    default: ""
+    required: false

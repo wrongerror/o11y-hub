@@ -1,0 +1,34 @@
+---
+short: Error Analysis
+long: >
+  Analyze HTTP errors and failure patterns across services.
+  Provides detailed error tracking and troubleshooting insights.
+
+category: Application
+tags:
+  - errors
+  - troubleshooting
+  - http
+  - failures
+
+parameters:
+  - name: start_time
+    type: string
+    description: "Start time for the query (e.g., -10m, -1h)"
+    default: "-10m"
+    required: true
+  - name: namespace
+    type: string
+    description: "Kubernetes namespace to filter (empty for all)"
+    default: ""
+    required: false
+  - name: service
+    type: string
+    description: "Service name to filter (empty for all)"
+    default: ""
+    required: false
+  - name: min_status_code
+    type: int
+    description: "Minimum HTTP status code to consider as error"
+    default: 400
+    required: false

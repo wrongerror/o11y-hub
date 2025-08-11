@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""
+Network Statistics Script
+
+Monitor network traffic and connection statistics by pod and namespace.
+"""
+
+import px
+
+
+def network_stats(start_time: str, namespace: str = "", pod: str = ""):
+    """
+    Get network statistics for pods.
+    
+    Args:
+        start_time: Start time for the query (e.g., "-5m")
+        namespace: Kubernetes namespace to filter (optional)
+        pod: Pod name to filter (optional)
+    """
+    
+    # Get network stats
+    df = px.DataFrame('network_stats', start_time=start_time)
+    
+    # Add context
+    df.namespace = df.ctx['namespace']
+    df.pod = df.ctx['pod']
+    df.node = df.ctx['node']
+    
+    # Apply filters if provided
+    if namespace:
+        df = df[df.namespace == namespace]
+    if pod:
+        df = df[df.pod == pod]
+    
+    # Convert bytes to MB
+    df.rx_bytes_mb = df.rx_bytes / (1024 * 1024)
+    df.tx_bytes_mb = df.tx_bytes / (1024 * 1024)
+    
+    # Aggregate by pod
+    pod_stats = df.groupby(['namespace', 'pod']).agg(
+        total_rx_mb=('rx_bytes_mb', px.sum),
+        total_tx_mb=('tx_bytes_mb', px.sum),
+        total_rx_packets=('rx_packets', px.sum),
+        total_tx_packets=('tx_packets', px.sum),
+        total_rx_errors=('rx_errors', px.sum),
+        total_tx_errors=('tx_errors', px.sum),
+        total_rx_drops=('rx_drops', px.sum),
+        total_tx_drops=('tx_drops', px.sum)
+    )
+    
+    # Calculate total traffic
+    pod_stats.total_traffic_mb = pod_stats.total_rx_mb + pod_stats.total_tx_mb
+    pod_stats.total_packets = pod_stats.total_rx_packets + pod_stats.total_tx_packets
+    pod_stats.total_errors = pod_stats.total_rx_errors + pod_stats.total_tx_errors
+    
+    # Calculate error rates
+    pod_stats.error_rate = pod_stats.total_errors / pod_stats.total_packets
+    
+    # Sort by total traffic
+    pod_stats = pod_stats.orderby(['total_traffic_mb'], ascending=[False])
+    
+    px.display(pod_stats, 'Network Statistics by Pod')
+    
+    # Namespace level aggregation
+    namespace_stats = df.groupby(['namespace']).agg(
+        pod_count=('pod', lambda x: px.distinct_count(x)),
+        total_rx_mb=('rx_bytes_mb', px.sum),
+        total_tx_mb=('tx_bytes_mb', px.sum),
+        total_packets=('rx_packets', lambda x: px.sum(x) + px.sum(df.tx_packets)),
+        total_errors=('rx_errors', lambda x: px.sum(x) + px.sum(df.tx_errors))
+    )
+    
+    namespace_stats.total_traffic_mb = namespace_stats.total_rx_mb + namespace_stats.total_tx_mb
+    namespace_stats.error_rate = namespace_stats.total_errors / namespace_stats.total_packets
+    
+    namespace_stats = namespace_stats.orderby(['total_traffic_mb'], ascending=[False])
+    
+    px.display(namespace_stats, 'Network Statistics by Namespace')
+    
+    # Time series for network trends
+    time_series = df.groupby(['time_']).agg(
+        rx_mbps=('rx_bytes_mb', px.sum),
+        tx_mbps=('tx_bytes_mb', px.sum),
+        total_packets=('rx_packets', lambda x: px.sum(x) + px.sum(df.tx_packets)),
+        total_errors=('rx_errors', lambda x: px.sum(x) + px.sum(df.tx_errors))
+    )
+    
+    # Calculate throughput (approximate)
+    time_series.total_mbps = time_series.rx_mbps + time_series.tx_mbps
+    time_series.error_rate = time_series.total_errors / time_series.total_packets
+    
+    px.display(time_series, 'Network Traffic Over Time')
+    
+    # Connection stats if available
+    try:
+        conn_df = px.DataFrame('conn_stats', start_time=start_time)
+        conn_df.namespace = conn_df.ctx['namespace']
+        conn_df.pod = conn_df.ctx['pod']
+        
+        if namespace:
+            conn_df = conn_df[conn_df.namespace == namespace]
+        if pod:
+            conn_df = conn_df[conn_df.pod == pod]
+        
+        # Convert bytes to MB
+        conn_df.bytes_sent_mb = conn_df.bytes_sent / (1024 * 1024)
+        conn_df.bytes_recv_mb = conn_df.bytes_recv / (1024 * 1024)
+        
+        conn_stats = conn_df.groupby(['namespace', 'pod']).agg(
+            active_connections=('conn_open', px.sum),
+            closed_connections=('conn_close', px.sum),
+            total_bytes_sent_mb=('bytes_sent_mb', px.sum),
+            total_bytes_recv_mb=('bytes_recv_mb', px.sum)
+        )
+        
+        conn_stats = conn_stats.orderby(['active_connections'], ascending=[False])
+        
+        px.display(conn_stats, 'Connection Statistics by Pod')
+        
+    except:
+        # Connection stats table might not be available
+        pass
+    
+    return pod_stats
+
+
+# Main execution
+px.display(network_stats(start_time, namespace, pod))

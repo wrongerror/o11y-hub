@@ -371,6 +371,7 @@ func (c *Client) extractDataFromResponses(stream pb.VizierService_ExecuteScriptC
 	responseCount := 0
 	var columns []string
 	var rows []map[string]interface{}
+	var tableMetadata map[string]*pb.QueryMetadata = make(map[string]*pb.QueryMetadata)
 
 	for {
 		resp, err := stream.Recv()
@@ -388,24 +389,69 @@ func (c *Client) extractDataFromResponses(stream pb.VizierService_ExecuteScriptC
 			return nil, fmt.Errorf("script execution failed: %s", resp.Status.Message)
 		}
 
-		// Parse response data - this is a simplified implementation
-		// In a real implementation, you would parse the actual Pixie response format
-		if responseCount == 1 {
-			// First response typically contains metadata or column information
-			c.logger.WithField("query_id", resp.QueryId).Debug("Processing first response")
-		}
+		// Process different types of responses
+		switch result := resp.Result.(type) {
+		case *pb.ExecuteScriptResponse_MetaData:
+			// Handle table metadata
+			metadata := result.MetaData
+			tableMetadata[metadata.Id] = metadata
 
-		// For now, we'll create mock data based on the script type
-		// In a real implementation, you would parse the actual response payload
-		mockData := c.generateMockDataFromQuery(query)
-		if len(mockData) > 0 {
-			if len(columns) == 0 {
-				// Extract columns from first data row
-				for key := range mockData[0] {
-					columns = append(columns, key)
+			// Extract column names for the first table
+			if len(columns) == 0 && metadata.Relation != nil {
+				for _, col := range metadata.Relation.Columns {
+					columns = append(columns, col.ColumnName)
 				}
 			}
-			rows = append(rows, mockData...)
+
+			c.logger.WithFields(logrus.Fields{
+				"table_id":     metadata.Id,
+				"table_name":   metadata.Name,
+				"column_count": len(metadata.Relation.Columns),
+			}).Debug("Received table metadata")
+
+		case *pb.ExecuteScriptResponse_Data:
+			// Handle actual data
+			if result.Data.Batch != nil {
+				batch := result.Data.Batch
+
+				// Get metadata for this table
+				metadata, exists := tableMetadata[batch.TableId]
+				if !exists {
+					c.logger.WithField("table_id", batch.TableId).Warn("Received data for unknown table")
+					continue
+				}
+
+				// Parse batch data into rows
+				if metadata.GetRelation() != nil {
+					batchRows, err := c.parseBatchData(batch, metadata.GetRelation().GetColumns())
+					if err != nil {
+						c.logger.WithError(err).Error("Failed to parse batch data")
+						continue
+					}
+
+					rows = append(rows, batchRows...)
+				}
+
+				c.logger.WithFields(logrus.Fields{
+					"table_id":   batch.TableId,
+					"total_rows": len(rows),
+				}).Debug("Processed data batch")
+			}
+
+			// Handle execution stats
+			if result.Data.ExecutionStats != nil {
+				stats := result.Data.ExecutionStats
+				c.logger.WithFields(logrus.Fields{
+					"execution_time_ns":   stats.ExecutionTimeNs,
+					"compilation_time_ns": stats.CompilationTimeNs,
+					"bytes_processed":     stats.BytesProcessed,
+					"records_processed":   stats.RecordsProcessed,
+				}).Debug("Received execution stats")
+			}
+
+		default:
+			// Handle other response types or log unknown types
+			c.logger.WithField("response_type", fmt.Sprintf("%T", result)).Debug("Received unknown response type")
 		}
 	}
 
@@ -426,19 +472,19 @@ func (c *Client) extractDataFromResponses(stream pb.VizierService_ExecuteScriptC
 // TODO: Replace this with actual response parsing in production
 func (c *Client) generateMockDataFromQuery(query string) []map[string]interface{} {
 	queryLower := strings.ToLower(query)
-	
+
 	if strings.Contains(queryLower, "cpu") || strings.Contains(queryLower, "memory") {
 		// Resource usage data
 		return []map[string]interface{}{
 			{
 				"pod_name":     "app-pod-1",
-				"namespace":    "default", 
+				"namespace":    "default",
 				"cpu_usage":    0.25,
 				"memory_usage": 0.45,
 				"timestamp":    time.Now().Unix(),
 			},
 			{
-				"pod_name":     "app-pod-2", 
+				"pod_name":     "app-pod-2",
 				"namespace":    "default",
 				"cpu_usage":    0.15,
 				"memory_usage": 0.32,
@@ -446,44 +492,121 @@ func (c *Client) generateMockDataFromQuery(query string) []map[string]interface{
 			},
 		}
 	}
-	
+
+	// TODO: Remove mock data once real data parsing is tested
 	if strings.Contains(queryLower, "http") || strings.Contains(queryLower, "request") {
 		// HTTP metrics data
 		return []map[string]interface{}{
 			{
-				"service_name":    "frontend",
-				"request_count":   1234,
-				"error_count":     12,
-				"avg_latency_ms":  45.6,
-				"p99_latency_ms":  156.7,
-				"timestamp":       time.Now().Unix(),
+				"service_name":   "frontend",
+				"request_count":  1234,
+				"error_count":    12,
+				"avg_latency_ms": 45.6,
+				"p99_latency_ms": 156.7,
+				"timestamp":      time.Now().Unix(),
 			},
 			{
-				"service_name":    "backend",
-				"request_count":   5678,
-				"error_count":     23,
-				"avg_latency_ms":  23.4,
-				"p99_latency_ms":  89.1,
-				"timestamp":       time.Now().Unix(),
+				"service_name":   "backend",
+				"request_count":  5678,
+				"error_count":    23,
+				"avg_latency_ms": 23.4,
+				"p99_latency_ms": 89.1,
+				"timestamp":      time.Now().Unix(),
 			},
 		}
 	}
-	
+
 	if strings.Contains(queryLower, "network") || strings.Contains(queryLower, "bytes") {
 		// Network metrics data
 		return []map[string]interface{}{
 			{
-				"pod_name":           "app-pod-1",
-				"namespace":          "default",
-				"bytes_sent":         1048576,
-				"bytes_received":     2097152,
-				"packets_sent":       1024,
-				"packets_received":   2048,
-				"timestamp":          time.Now().Unix(),
+				"pod_name":         "app-pod-1",
+				"namespace":        "default",
+				"bytes_sent":       1048576,
+				"bytes_received":   2097152,
+				"packets_sent":     1024,
+				"packets_received": 2048,
+				"timestamp":        time.Now().Unix(),
 			},
 		}
 	}
-	
+
 	// Default empty data
 	return []map[string]interface{}{}
+}
+
+// parseBatchData converts RowBatchData protobuf to structured rows using column metadata
+func (c *Client) parseBatchData(batchData *pb.RowBatchData, columns []*pb.Column) ([]map[string]interface{}, error) {
+	if batchData == nil || len(columns) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+
+	var rows []map[string]interface{}
+
+	// Get number of rows from protobuf
+	numRows := int(batchData.GetNumRows())
+	if numRows == 0 {
+		return []map[string]interface{}{}, nil
+	}
+
+	// Use the columns map for data access if available
+	columnDataMap := batchData.GetColumns()
+	if len(columnDataMap) == 0 {
+		// Fallback: no data available
+		return []map[string]interface{}{}, nil
+	}
+
+	// Convert column-wise data to row-wise data
+	for rowIdx := 0; rowIdx < numRows; rowIdx++ {
+		row := make(map[string]interface{})
+
+		for _, column := range columns {
+			columnName := column.GetColumnName()
+			columnData := columnDataMap[columnName]
+
+			if columnData == nil || columnData.GetValues() == nil {
+				row[columnName] = nil
+				continue
+			}
+
+			values := columnData.GetValues()
+			if rowIdx >= len(values) {
+				row[columnName] = nil
+				continue
+			}
+
+			datum := values[rowIdx]
+			if datum == nil {
+				row[columnName] = nil
+				continue
+			}
+
+			// Extract value based on datum type
+			var value interface{}
+			switch v := datum.Val.(type) {
+			case *pb.Datum_BoolValue:
+				value = v.BoolValue
+			case *pb.Datum_Int64Value:
+				value = v.Int64Value
+			case *pb.Datum_Uint128Value:
+				// UInt128 is stored as string in protobuf
+				value = v.Uint128Value
+			case *pb.Datum_Float64Value:
+				value = v.Float64Value
+			case *pb.Datum_StringValue:
+				value = v.StringValue
+			case *pb.Datum_Time64NsValue:
+				// Convert nanoseconds to Unix timestamp
+				value = v.Time64NsValue / 1e9
+			default:
+				value = nil
+			}
+
+			row[columnName] = value
+		}
+
+		rows = append(rows, row)
+	}
+
+	return rows, nil
 }

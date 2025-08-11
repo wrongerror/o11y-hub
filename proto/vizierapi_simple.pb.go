@@ -21,7 +21,704 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Simple but accurate status - using int32 like Pixie
+// Data types supported by the execution engine
+type DataType int32
+
+const (
+	DataType_DATA_TYPE_UNKNOWN DataType = 0
+	DataType_BOOLEAN           DataType = 1
+	DataType_INT64             DataType = 2
+	DataType_UINT128           DataType = 3
+	DataType_FLOAT64           DataType = 4
+	DataType_STRING            DataType = 5
+	DataType_TIME64NS          DataType = 6
+)
+
+// Enum value maps for DataType.
+var (
+	DataType_name = map[int32]string{
+		0: "DATA_TYPE_UNKNOWN",
+		1: "BOOLEAN",
+		2: "INT64",
+		3: "UINT128",
+		4: "FLOAT64",
+		5: "STRING",
+		6: "TIME64NS",
+	}
+	DataType_value = map[string]int32{
+		"DATA_TYPE_UNKNOWN": 0,
+		"BOOLEAN":           1,
+		"INT64":             2,
+		"UINT128":           3,
+		"FLOAT64":           4,
+		"STRING":            5,
+		"TIME64NS":          6,
+	}
+)
+
+func (x DataType) Enum() *DataType {
+	p := new(DataType)
+	*p = x
+	return p
+}
+
+func (x DataType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DataType) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_vizierapi_simple_proto_enumTypes[0].Descriptor()
+}
+
+func (DataType) Type() protoreflect.EnumType {
+	return &file_proto_vizierapi_simple_proto_enumTypes[0]
+}
+
+func (x DataType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DataType.Descriptor instead.
+func (DataType) EnumDescriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{0}
+}
+
+// Semantic types for formatting data
+type SemanticType int32
+
+const (
+	SemanticType_ST_UNSPECIFIED    SemanticType = 0
+	SemanticType_ST_NONE           SemanticType = 1
+	SemanticType_ST_TIME_NS        SemanticType = 2
+	SemanticType_ST_SERVICE_NAME   SemanticType = 300
+	SemanticType_ST_POD_NAME       SemanticType = 400
+	SemanticType_ST_NAMESPACE_NAME SemanticType = 700
+	SemanticType_ST_BYTES          SemanticType = 800
+	SemanticType_ST_PERCENT        SemanticType = 900
+	SemanticType_ST_DURATION_NS    SemanticType = 901
+)
+
+// Enum value maps for SemanticType.
+var (
+	SemanticType_name = map[int32]string{
+		0:   "ST_UNSPECIFIED",
+		1:   "ST_NONE",
+		2:   "ST_TIME_NS",
+		300: "ST_SERVICE_NAME",
+		400: "ST_POD_NAME",
+		700: "ST_NAMESPACE_NAME",
+		800: "ST_BYTES",
+		900: "ST_PERCENT",
+		901: "ST_DURATION_NS",
+	}
+	SemanticType_value = map[string]int32{
+		"ST_UNSPECIFIED":    0,
+		"ST_NONE":           1,
+		"ST_TIME_NS":        2,
+		"ST_SERVICE_NAME":   300,
+		"ST_POD_NAME":       400,
+		"ST_NAMESPACE_NAME": 700,
+		"ST_BYTES":          800,
+		"ST_PERCENT":        900,
+		"ST_DURATION_NS":    901,
+	}
+)
+
+func (x SemanticType) Enum() *SemanticType {
+	p := new(SemanticType)
+	*p = x
+	return p
+}
+
+func (x SemanticType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SemanticType) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_vizierapi_simple_proto_enumTypes[1].Descriptor()
+}
+
+func (SemanticType) Type() protoreflect.EnumType {
+	return &file_proto_vizierapi_simple_proto_enumTypes[1]
+}
+
+func (x SemanticType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SemanticType.Descriptor instead.
+func (SemanticType) EnumDescriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{1}
+}
+
+// Column definition
+type Column struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	ColumnName         string                 `protobuf:"bytes,1,opt,name=column_name,json=columnName,proto3" json:"column_name,omitempty"`
+	ColumnType         DataType               `protobuf:"varint,2,opt,name=column_type,json=columnType,proto3,enum=px.api.vizierpb.DataType" json:"column_type,omitempty"`
+	ColumnSemanticType SemanticType           `protobuf:"varint,3,opt,name=column_semantic_type,json=columnSemanticType,proto3,enum=px.api.vizierpb.SemanticType" json:"column_semantic_type,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *Column) Reset() {
+	*x = Column{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Column) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Column) ProtoMessage() {}
+
+func (x *Column) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Column.ProtoReflect.Descriptor instead.
+func (*Column) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Column) GetColumnName() string {
+	if x != nil {
+		return x.ColumnName
+	}
+	return ""
+}
+
+func (x *Column) GetColumnType() DataType {
+	if x != nil {
+		return x.ColumnType
+	}
+	return DataType_DATA_TYPE_UNKNOWN
+}
+
+func (x *Column) GetColumnSemanticType() SemanticType {
+	if x != nil {
+		return x.ColumnSemanticType
+	}
+	return SemanticType_ST_UNSPECIFIED
+}
+
+// Table relation/schema
+type Relation struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Columns       []*Column              `protobuf:"bytes,1,rep,name=columns,proto3" json:"columns,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Relation) Reset() {
+	*x = Relation{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Relation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Relation) ProtoMessage() {}
+
+func (x *Relation) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Relation.ProtoReflect.Descriptor instead.
+func (*Relation) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Relation) GetColumns() []*Column {
+	if x != nil {
+		return x.Columns
+	}
+	return nil
+}
+
+// A single data value
+type Datum struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Val:
+	//
+	//	*Datum_BoolValue
+	//	*Datum_Int64Value
+	//	*Datum_Float64Value
+	//	*Datum_StringValue
+	//	*Datum_Time64NsValue
+	//	*Datum_Uint128Value
+	Val           isDatum_Val `protobuf_oneof:"val"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Datum) Reset() {
+	*x = Datum{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Datum) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Datum) ProtoMessage() {}
+
+func (x *Datum) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Datum.ProtoReflect.Descriptor instead.
+func (*Datum) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Datum) GetVal() isDatum_Val {
+	if x != nil {
+		return x.Val
+	}
+	return nil
+}
+
+func (x *Datum) GetBoolValue() bool {
+	if x != nil {
+		if x, ok := x.Val.(*Datum_BoolValue); ok {
+			return x.BoolValue
+		}
+	}
+	return false
+}
+
+func (x *Datum) GetInt64Value() int64 {
+	if x != nil {
+		if x, ok := x.Val.(*Datum_Int64Value); ok {
+			return x.Int64Value
+		}
+	}
+	return 0
+}
+
+func (x *Datum) GetFloat64Value() float64 {
+	if x != nil {
+		if x, ok := x.Val.(*Datum_Float64Value); ok {
+			return x.Float64Value
+		}
+	}
+	return 0
+}
+
+func (x *Datum) GetStringValue() string {
+	if x != nil {
+		if x, ok := x.Val.(*Datum_StringValue); ok {
+			return x.StringValue
+		}
+	}
+	return ""
+}
+
+func (x *Datum) GetTime64NsValue() int64 {
+	if x != nil {
+		if x, ok := x.Val.(*Datum_Time64NsValue); ok {
+			return x.Time64NsValue
+		}
+	}
+	return 0
+}
+
+func (x *Datum) GetUint128Value() string {
+	if x != nil {
+		if x, ok := x.Val.(*Datum_Uint128Value); ok {
+			return x.Uint128Value
+		}
+	}
+	return ""
+}
+
+type isDatum_Val interface {
+	isDatum_Val()
+}
+
+type Datum_BoolValue struct {
+	BoolValue bool `protobuf:"varint,1,opt,name=bool_value,json=boolValue,proto3,oneof"`
+}
+
+type Datum_Int64Value struct {
+	Int64Value int64 `protobuf:"varint,2,opt,name=int64_value,json=int64Value,proto3,oneof"`
+}
+
+type Datum_Float64Value struct {
+	Float64Value float64 `protobuf:"fixed64,4,opt,name=float64_value,json=float64Value,proto3,oneof"`
+}
+
+type Datum_StringValue struct {
+	StringValue string `protobuf:"bytes,5,opt,name=string_value,json=stringValue,proto3,oneof"`
+}
+
+type Datum_Time64NsValue struct {
+	Time64NsValue int64 `protobuf:"varint,6,opt,name=time64_ns_value,json=time64NsValue,proto3,oneof"`
+}
+
+type Datum_Uint128Value struct {
+	// For UINT128, we'll use string representation for simplicity
+	Uint128Value string `protobuf:"bytes,7,opt,name=uint128_value,json=uint128Value,proto3,oneof"`
+}
+
+func (*Datum_BoolValue) isDatum_Val() {}
+
+func (*Datum_Int64Value) isDatum_Val() {}
+
+func (*Datum_Float64Value) isDatum_Val() {}
+
+func (*Datum_StringValue) isDatum_Val() {}
+
+func (*Datum_Time64NsValue) isDatum_Val() {}
+
+func (*Datum_Uint128Value) isDatum_Val() {}
+
+// A single row of data
+type RowBatchData struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	TableId string                 `protobuf:"bytes,1,opt,name=table_id,json=tableId,proto3" json:"table_id,omitempty"`
+	// Each sub-array represents a column, with each element being a row value
+	Cols []*Column `protobuf:"bytes,2,rep,name=cols,proto3" json:"cols,omitempty"`
+	// Number of rows in this batch
+	NumRows int64 `protobuf:"varint,3,opt,name=num_rows,json=numRows,proto3" json:"num_rows,omitempty"`
+	// Each column's data as repeated values
+	Columns map[string]*ColumnData `protobuf:"bytes,4,rep,name=columns,proto3" json:"columns,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// End of stream indicator
+	Eos           bool `protobuf:"varint,5,opt,name=eos,proto3" json:"eos,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RowBatchData) Reset() {
+	*x = RowBatchData{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RowBatchData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RowBatchData) ProtoMessage() {}
+
+func (x *RowBatchData) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RowBatchData.ProtoReflect.Descriptor instead.
+func (*RowBatchData) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *RowBatchData) GetTableId() string {
+	if x != nil {
+		return x.TableId
+	}
+	return ""
+}
+
+func (x *RowBatchData) GetCols() []*Column {
+	if x != nil {
+		return x.Cols
+	}
+	return nil
+}
+
+func (x *RowBatchData) GetNumRows() int64 {
+	if x != nil {
+		return x.NumRows
+	}
+	return 0
+}
+
+func (x *RowBatchData) GetColumns() map[string]*ColumnData {
+	if x != nil {
+		return x.Columns
+	}
+	return nil
+}
+
+func (x *RowBatchData) GetEos() bool {
+	if x != nil {
+		return x.Eos
+	}
+	return false
+}
+
+// Column data containing the actual values
+type ColumnData struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Values        []*Datum               `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ColumnData) Reset() {
+	*x = ColumnData{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ColumnData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ColumnData) ProtoMessage() {}
+
+func (x *ColumnData) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ColumnData.ProtoReflect.Descriptor instead.
+func (*ColumnData) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ColumnData) GetValues() []*Datum {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+// Query metadata describing a table
+type QueryMetadata struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Relation      *Relation              `protobuf:"bytes,1,opt,name=relation,proto3" json:"relation,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Id            string                 `protobuf:"bytes,3,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryMetadata) Reset() {
+	*x = QueryMetadata{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryMetadata) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryMetadata) ProtoMessage() {}
+
+func (x *QueryMetadata) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryMetadata.ProtoReflect.Descriptor instead.
+func (*QueryMetadata) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *QueryMetadata) GetRelation() *Relation {
+	if x != nil {
+		return x.Relation
+	}
+	return nil
+}
+
+func (x *QueryMetadata) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *QueryMetadata) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// Execution statistics
+type QueryExecutionStats struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Execution time in nanoseconds
+	ExecutionTimeNs int64 `protobuf:"varint,1,opt,name=execution_time_ns,json=executionTimeNs,proto3" json:"execution_time_ns,omitempty"`
+	// Compilation time in nanoseconds
+	CompilationTimeNs int64 `protobuf:"varint,2,opt,name=compilation_time_ns,json=compilationTimeNs,proto3" json:"compilation_time_ns,omitempty"`
+	// Number of bytes processed
+	BytesProcessed int64 `protobuf:"varint,3,opt,name=bytes_processed,json=bytesProcessed,proto3" json:"bytes_processed,omitempty"`
+	// Number of records processed
+	RecordsProcessed int64 `protobuf:"varint,4,opt,name=records_processed,json=recordsProcessed,proto3" json:"records_processed,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *QueryExecutionStats) Reset() {
+	*x = QueryExecutionStats{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryExecutionStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryExecutionStats) ProtoMessage() {}
+
+func (x *QueryExecutionStats) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryExecutionStats.ProtoReflect.Descriptor instead.
+func (*QueryExecutionStats) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *QueryExecutionStats) GetExecutionTimeNs() int64 {
+	if x != nil {
+		return x.ExecutionTimeNs
+	}
+	return 0
+}
+
+func (x *QueryExecutionStats) GetCompilationTimeNs() int64 {
+	if x != nil {
+		return x.CompilationTimeNs
+	}
+	return 0
+}
+
+func (x *QueryExecutionStats) GetBytesProcessed() int64 {
+	if x != nil {
+		return x.BytesProcessed
+	}
+	return 0
+}
+
+func (x *QueryExecutionStats) GetRecordsProcessed() int64 {
+	if x != nil {
+		return x.RecordsProcessed
+	}
+	return 0
+}
+
+// Query data containing either row batch or execution stats
+type QueryData struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Batch          *RowBatchData          `protobuf:"bytes,1,opt,name=batch,proto3" json:"batch,omitempty"`
+	ExecutionStats *QueryExecutionStats   `protobuf:"bytes,2,opt,name=execution_stats,json=executionStats,proto3" json:"execution_stats,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *QueryData) Reset() {
+	*x = QueryData{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryData) ProtoMessage() {}
+
+func (x *QueryData) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryData.ProtoReflect.Descriptor instead.
+func (*QueryData) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *QueryData) GetBatch() *RowBatchData {
+	if x != nil {
+		return x.Batch
+	}
+	return nil
+}
+
+func (x *QueryData) GetExecutionStats() *QueryExecutionStats {
+	if x != nil {
+		return x.ExecutionStats
+	}
+	return nil
+}
+
+// Status message
 type Status struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Code          int32                  `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
@@ -32,7 +729,7 @@ type Status struct {
 
 func (x *Status) Reset() {
 	*x = Status{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[0]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44,7 +741,7 @@ func (x *Status) String() string {
 func (*Status) ProtoMessage() {}
 
 func (x *Status) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[0]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -57,7 +754,7 @@ func (x *Status) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Status.ProtoReflect.Descriptor instead.
 func (*Status) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{0}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Status) GetCode() int32 {
@@ -74,19 +771,19 @@ func (x *Status) GetMessage() string {
 	return ""
 }
 
-// Minimal but accurate ExecuteScriptRequest
+// Execute script request
 type ExecuteScriptRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	QueryStr      string                 `protobuf:"bytes,1,opt,name=query_str,json=queryStr,proto3" json:"query_str,omitempty"`
-	ClusterId     string                 `protobuf:"bytes,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"` // Field 3 like Pixie
-	Mutation      bool                   `protobuf:"varint,5,opt,name=mutation,proto3" json:"mutation,omitempty"`                   // Field 5 like Pixie
+	ClusterId     string                 `protobuf:"bytes,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
+	Mutation      bool                   `protobuf:"varint,5,opt,name=mutation,proto3" json:"mutation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ExecuteScriptRequest) Reset() {
 	*x = ExecuteScriptRequest{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[1]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -98,7 +795,7 @@ func (x *ExecuteScriptRequest) String() string {
 func (*ExecuteScriptRequest) ProtoMessage() {}
 
 func (x *ExecuteScriptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[1]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -111,7 +808,7 @@ func (x *ExecuteScriptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteScriptRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteScriptRequest) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{1}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ExecuteScriptRequest) GetQueryStr() string {
@@ -135,18 +832,23 @@ func (x *ExecuteScriptRequest) GetMutation() bool {
 	return false
 }
 
-// Minimal but accurate ExecuteScriptResponse
+// Execute script response - now with data capability
 type ExecuteScriptResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Status        *Status                `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
-	QueryId       string                 `protobuf:"bytes,2,opt,name=query_id,json=queryId,proto3" json:"query_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Status  *Status                `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	QueryId string                 `protobuf:"bytes,2,opt,name=query_id,json=queryId,proto3" json:"query_id,omitempty"`
+	// Types that are valid to be assigned to Result:
+	//
+	//	*ExecuteScriptResponse_Data
+	//	*ExecuteScriptResponse_MetaData
+	Result        isExecuteScriptResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ExecuteScriptResponse) Reset() {
 	*x = ExecuteScriptResponse{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[2]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -158,7 +860,7 @@ func (x *ExecuteScriptResponse) String() string {
 func (*ExecuteScriptResponse) ProtoMessage() {}
 
 func (x *ExecuteScriptResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[2]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -171,7 +873,7 @@ func (x *ExecuteScriptResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteScriptResponse.ProtoReflect.Descriptor instead.
 func (*ExecuteScriptResponse) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{2}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ExecuteScriptResponse) GetStatus() *Status {
@@ -188,6 +890,47 @@ func (x *ExecuteScriptResponse) GetQueryId() string {
 	return ""
 }
 
+func (x *ExecuteScriptResponse) GetResult() isExecuteScriptResponse_Result {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *ExecuteScriptResponse) GetData() *QueryData {
+	if x != nil {
+		if x, ok := x.Result.(*ExecuteScriptResponse_Data); ok {
+			return x.Data
+		}
+	}
+	return nil
+}
+
+func (x *ExecuteScriptResponse) GetMetaData() *QueryMetadata {
+	if x != nil {
+		if x, ok := x.Result.(*ExecuteScriptResponse_MetaData); ok {
+			return x.MetaData
+		}
+	}
+	return nil
+}
+
+type isExecuteScriptResponse_Result interface {
+	isExecuteScriptResponse_Result()
+}
+
+type ExecuteScriptResponse_Data struct {
+	Data *QueryData `protobuf:"bytes,3,opt,name=data,proto3,oneof"`
+}
+
+type ExecuteScriptResponse_MetaData struct {
+	MetaData *QueryMetadata `protobuf:"bytes,4,opt,name=meta_data,json=metaData,proto3,oneof"`
+}
+
+func (*ExecuteScriptResponse_Data) isExecuteScriptResponse_Result() {}
+
+func (*ExecuteScriptResponse_MetaData) isExecuteScriptResponse_Result() {}
+
 // Health check messages
 type HealthCheckRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -198,7 +941,7 @@ type HealthCheckRequest struct {
 
 func (x *HealthCheckRequest) Reset() {
 	*x = HealthCheckRequest{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[3]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -210,7 +953,7 @@ func (x *HealthCheckRequest) String() string {
 func (*HealthCheckRequest) ProtoMessage() {}
 
 func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[3]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -223,7 +966,7 @@ func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckRequest.ProtoReflect.Descriptor instead.
 func (*HealthCheckRequest) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{3}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *HealthCheckRequest) GetClusterId() string {
@@ -242,7 +985,7 @@ type HealthCheckResponse struct {
 
 func (x *HealthCheckResponse) Reset() {
 	*x = HealthCheckResponse{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[4]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -254,7 +997,7 @@ func (x *HealthCheckResponse) String() string {
 func (*HealthCheckResponse) ProtoMessage() {}
 
 func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[4]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -267,7 +1010,7 @@ func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckResponse.ProtoReflect.Descriptor instead.
 func (*HealthCheckResponse) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{4}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *HealthCheckResponse) GetStatus() *Status {
@@ -281,7 +1024,49 @@ var File_proto_vizierapi_simple_proto protoreflect.FileDescriptor
 
 const file_proto_vizierapi_simple_proto_rawDesc = "" +
 	"\n" +
-	"\x1cproto/vizierapi_simple.proto\x12\x0fpx.api.vizierpb\"6\n" +
+	"\x1cproto/vizierapi_simple.proto\x12\x0fpx.api.vizierpb\"\xb6\x01\n" +
+	"\x06Column\x12\x1f\n" +
+	"\vcolumn_name\x18\x01 \x01(\tR\n" +
+	"columnName\x12:\n" +
+	"\vcolumn_type\x18\x02 \x01(\x0e2\x19.px.api.vizierpb.DataTypeR\n" +
+	"columnType\x12O\n" +
+	"\x14column_semantic_type\x18\x03 \x01(\x0e2\x1d.px.api.vizierpb.SemanticTypeR\x12columnSemanticType\"=\n" +
+	"\bRelation\x121\n" +
+	"\acolumns\x18\x01 \x03(\v2\x17.px.api.vizierpb.ColumnR\acolumns\"\xef\x01\n" +
+	"\x05Datum\x12\x1f\n" +
+	"\n" +
+	"bool_value\x18\x01 \x01(\bH\x00R\tboolValue\x12!\n" +
+	"\vint64_value\x18\x02 \x01(\x03H\x00R\n" +
+	"int64Value\x12%\n" +
+	"\rfloat64_value\x18\x04 \x01(\x01H\x00R\ffloat64Value\x12#\n" +
+	"\fstring_value\x18\x05 \x01(\tH\x00R\vstringValue\x12(\n" +
+	"\x0ftime64_ns_value\x18\x06 \x01(\x03H\x00R\rtime64NsValue\x12%\n" +
+	"\ruint128_value\x18\a \x01(\tH\x00R\fuint128ValueB\x05\n" +
+	"\x03val\"\xa2\x02\n" +
+	"\fRowBatchData\x12\x19\n" +
+	"\btable_id\x18\x01 \x01(\tR\atableId\x12+\n" +
+	"\x04cols\x18\x02 \x03(\v2\x17.px.api.vizierpb.ColumnR\x04cols\x12\x19\n" +
+	"\bnum_rows\x18\x03 \x01(\x03R\anumRows\x12D\n" +
+	"\acolumns\x18\x04 \x03(\v2*.px.api.vizierpb.RowBatchData.ColumnsEntryR\acolumns\x12\x10\n" +
+	"\x03eos\x18\x05 \x01(\bR\x03eos\x1aW\n" +
+	"\fColumnsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x121\n" +
+	"\x05value\x18\x02 \x01(\v2\x1b.px.api.vizierpb.ColumnDataR\x05value:\x028\x01\"<\n" +
+	"\n" +
+	"ColumnData\x12.\n" +
+	"\x06values\x18\x01 \x03(\v2\x16.px.api.vizierpb.DatumR\x06values\"j\n" +
+	"\rQueryMetadata\x125\n" +
+	"\brelation\x18\x01 \x01(\v2\x19.px.api.vizierpb.RelationR\brelation\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\"\xc7\x01\n" +
+	"\x13QueryExecutionStats\x12*\n" +
+	"\x11execution_time_ns\x18\x01 \x01(\x03R\x0fexecutionTimeNs\x12.\n" +
+	"\x13compilation_time_ns\x18\x02 \x01(\x03R\x11compilationTimeNs\x12'\n" +
+	"\x0fbytes_processed\x18\x03 \x01(\x03R\x0ebytesProcessed\x12+\n" +
+	"\x11records_processed\x18\x04 \x01(\x03R\x10recordsProcessed\"\x8f\x01\n" +
+	"\tQueryData\x123\n" +
+	"\x05batch\x18\x01 \x01(\v2\x1d.px.api.vizierpb.RowBatchDataR\x05batch\x12M\n" +
+	"\x0fexecution_stats\x18\x02 \x01(\v2$.px.api.vizierpb.QueryExecutionStatsR\x0eexecutionStats\"6\n" +
 	"\x06Status\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\x05R\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"n\n" +
@@ -289,15 +1074,39 @@ const file_proto_vizierapi_simple_proto_rawDesc = "" +
 	"\tquery_str\x18\x01 \x01(\tR\bqueryStr\x12\x1d\n" +
 	"\n" +
 	"cluster_id\x18\x03 \x01(\tR\tclusterId\x12\x1a\n" +
-	"\bmutation\x18\x05 \x01(\bR\bmutation\"c\n" +
+	"\bmutation\x18\x05 \x01(\bR\bmutation\"\xde\x01\n" +
 	"\x15ExecuteScriptResponse\x12/\n" +
 	"\x06status\x18\x01 \x01(\v2\x17.px.api.vizierpb.StatusR\x06status\x12\x19\n" +
-	"\bquery_id\x18\x02 \x01(\tR\aqueryId\"3\n" +
+	"\bquery_id\x18\x02 \x01(\tR\aqueryId\x120\n" +
+	"\x04data\x18\x03 \x01(\v2\x1a.px.api.vizierpb.QueryDataH\x00R\x04data\x12=\n" +
+	"\tmeta_data\x18\x04 \x01(\v2\x1e.px.api.vizierpb.QueryMetadataH\x00R\bmetaDataB\b\n" +
+	"\x06result\"3\n" +
 	"\x12HealthCheckRequest\x12\x1d\n" +
 	"\n" +
 	"cluster_id\x18\x01 \x01(\tR\tclusterId\"F\n" +
 	"\x13HealthCheckResponse\x12/\n" +
-	"\x06status\x18\x01 \x01(\v2\x17.px.api.vizierpb.StatusR\x06status2\xcd\x01\n" +
+	"\x06status\x18\x01 \x01(\v2\x17.px.api.vizierpb.StatusR\x06status*m\n" +
+	"\bDataType\x12\x15\n" +
+	"\x11DATA_TYPE_UNKNOWN\x10\x00\x12\v\n" +
+	"\aBOOLEAN\x10\x01\x12\t\n" +
+	"\x05INT64\x10\x02\x12\v\n" +
+	"\aUINT128\x10\x03\x12\v\n" +
+	"\aFLOAT64\x10\x04\x12\n" +
+	"\n" +
+	"\x06STRING\x10\x05\x12\f\n" +
+	"\bTIME64NS\x10\x06*\xb4\x01\n" +
+	"\fSemanticType\x12\x12\n" +
+	"\x0eST_UNSPECIFIED\x10\x00\x12\v\n" +
+	"\aST_NONE\x10\x01\x12\x0e\n" +
+	"\n" +
+	"ST_TIME_NS\x10\x02\x12\x14\n" +
+	"\x0fST_SERVICE_NAME\x10\xac\x02\x12\x10\n" +
+	"\vST_POD_NAME\x10\x90\x03\x12\x16\n" +
+	"\x11ST_NAMESPACE_NAME\x10\xbc\x05\x12\r\n" +
+	"\bST_BYTES\x10\xa0\x06\x12\x0f\n" +
+	"\n" +
+	"ST_PERCENT\x10\x84\a\x12\x13\n" +
+	"\x0eST_DURATION_NS\x10\x85\a2\xcd\x01\n" +
 	"\rVizierService\x12Z\n" +
 	"\vHealthCheck\x12#.px.api.vizierpb.HealthCheckRequest\x1a$.px.api.vizierpb.HealthCheckResponse0\x01\x12`\n" +
 	"\rExecuteScript\x12%.px.api.vizierpb.ExecuteScriptRequest\x1a&.px.api.vizierpb.ExecuteScriptResponse0\x01B/Z-github.com/wrongerror/observo-connector/protob\x06proto3"
@@ -314,26 +1123,50 @@ func file_proto_vizierapi_simple_proto_rawDescGZIP() []byte {
 	return file_proto_vizierapi_simple_proto_rawDescData
 }
 
-var file_proto_vizierapi_simple_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_proto_vizierapi_simple_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_proto_vizierapi_simple_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_proto_vizierapi_simple_proto_goTypes = []any{
-	(*Status)(nil),                // 0: px.api.vizierpb.Status
-	(*ExecuteScriptRequest)(nil),  // 1: px.api.vizierpb.ExecuteScriptRequest
-	(*ExecuteScriptResponse)(nil), // 2: px.api.vizierpb.ExecuteScriptResponse
-	(*HealthCheckRequest)(nil),    // 3: px.api.vizierpb.HealthCheckRequest
-	(*HealthCheckResponse)(nil),   // 4: px.api.vizierpb.HealthCheckResponse
+	(DataType)(0),                 // 0: px.api.vizierpb.DataType
+	(SemanticType)(0),             // 1: px.api.vizierpb.SemanticType
+	(*Column)(nil),                // 2: px.api.vizierpb.Column
+	(*Relation)(nil),              // 3: px.api.vizierpb.Relation
+	(*Datum)(nil),                 // 4: px.api.vizierpb.Datum
+	(*RowBatchData)(nil),          // 5: px.api.vizierpb.RowBatchData
+	(*ColumnData)(nil),            // 6: px.api.vizierpb.ColumnData
+	(*QueryMetadata)(nil),         // 7: px.api.vizierpb.QueryMetadata
+	(*QueryExecutionStats)(nil),   // 8: px.api.vizierpb.QueryExecutionStats
+	(*QueryData)(nil),             // 9: px.api.vizierpb.QueryData
+	(*Status)(nil),                // 10: px.api.vizierpb.Status
+	(*ExecuteScriptRequest)(nil),  // 11: px.api.vizierpb.ExecuteScriptRequest
+	(*ExecuteScriptResponse)(nil), // 12: px.api.vizierpb.ExecuteScriptResponse
+	(*HealthCheckRequest)(nil),    // 13: px.api.vizierpb.HealthCheckRequest
+	(*HealthCheckResponse)(nil),   // 14: px.api.vizierpb.HealthCheckResponse
+	nil,                           // 15: px.api.vizierpb.RowBatchData.ColumnsEntry
 }
 var file_proto_vizierapi_simple_proto_depIdxs = []int32{
-	0, // 0: px.api.vizierpb.ExecuteScriptResponse.status:type_name -> px.api.vizierpb.Status
-	0, // 1: px.api.vizierpb.HealthCheckResponse.status:type_name -> px.api.vizierpb.Status
-	3, // 2: px.api.vizierpb.VizierService.HealthCheck:input_type -> px.api.vizierpb.HealthCheckRequest
-	1, // 3: px.api.vizierpb.VizierService.ExecuteScript:input_type -> px.api.vizierpb.ExecuteScriptRequest
-	4, // 4: px.api.vizierpb.VizierService.HealthCheck:output_type -> px.api.vizierpb.HealthCheckResponse
-	2, // 5: px.api.vizierpb.VizierService.ExecuteScript:output_type -> px.api.vizierpb.ExecuteScriptResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	0,  // 0: px.api.vizierpb.Column.column_type:type_name -> px.api.vizierpb.DataType
+	1,  // 1: px.api.vizierpb.Column.column_semantic_type:type_name -> px.api.vizierpb.SemanticType
+	2,  // 2: px.api.vizierpb.Relation.columns:type_name -> px.api.vizierpb.Column
+	2,  // 3: px.api.vizierpb.RowBatchData.cols:type_name -> px.api.vizierpb.Column
+	15, // 4: px.api.vizierpb.RowBatchData.columns:type_name -> px.api.vizierpb.RowBatchData.ColumnsEntry
+	4,  // 5: px.api.vizierpb.ColumnData.values:type_name -> px.api.vizierpb.Datum
+	3,  // 6: px.api.vizierpb.QueryMetadata.relation:type_name -> px.api.vizierpb.Relation
+	5,  // 7: px.api.vizierpb.QueryData.batch:type_name -> px.api.vizierpb.RowBatchData
+	8,  // 8: px.api.vizierpb.QueryData.execution_stats:type_name -> px.api.vizierpb.QueryExecutionStats
+	10, // 9: px.api.vizierpb.ExecuteScriptResponse.status:type_name -> px.api.vizierpb.Status
+	9,  // 10: px.api.vizierpb.ExecuteScriptResponse.data:type_name -> px.api.vizierpb.QueryData
+	7,  // 11: px.api.vizierpb.ExecuteScriptResponse.meta_data:type_name -> px.api.vizierpb.QueryMetadata
+	10, // 12: px.api.vizierpb.HealthCheckResponse.status:type_name -> px.api.vizierpb.Status
+	6,  // 13: px.api.vizierpb.RowBatchData.ColumnsEntry.value:type_name -> px.api.vizierpb.ColumnData
+	13, // 14: px.api.vizierpb.VizierService.HealthCheck:input_type -> px.api.vizierpb.HealthCheckRequest
+	11, // 15: px.api.vizierpb.VizierService.ExecuteScript:input_type -> px.api.vizierpb.ExecuteScriptRequest
+	14, // 16: px.api.vizierpb.VizierService.HealthCheck:output_type -> px.api.vizierpb.HealthCheckResponse
+	12, // 17: px.api.vizierpb.VizierService.ExecuteScript:output_type -> px.api.vizierpb.ExecuteScriptResponse
+	16, // [16:18] is the sub-list for method output_type
+	14, // [14:16] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_proto_vizierapi_simple_proto_init() }
@@ -341,18 +1174,31 @@ func file_proto_vizierapi_simple_proto_init() {
 	if File_proto_vizierapi_simple_proto != nil {
 		return
 	}
+	file_proto_vizierapi_simple_proto_msgTypes[2].OneofWrappers = []any{
+		(*Datum_BoolValue)(nil),
+		(*Datum_Int64Value)(nil),
+		(*Datum_Float64Value)(nil),
+		(*Datum_StringValue)(nil),
+		(*Datum_Time64NsValue)(nil),
+		(*Datum_Uint128Value)(nil),
+	}
+	file_proto_vizierapi_simple_proto_msgTypes[10].OneofWrappers = []any{
+		(*ExecuteScriptResponse_Data)(nil),
+		(*ExecuteScriptResponse_MetaData)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_vizierapi_simple_proto_rawDesc), len(file_proto_vizierapi_simple_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   5,
+			NumEnums:      2,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_proto_vizierapi_simple_proto_goTypes,
 		DependencyIndexes: file_proto_vizierapi_simple_proto_depIdxs,
+		EnumInfos:         file_proto_vizierapi_simple_proto_enumTypes,
 		MessageInfos:      file_proto_vizierapi_simple_proto_msgTypes,
 	}.Build()
 	File_proto_vizierapi_simple_proto = out.File

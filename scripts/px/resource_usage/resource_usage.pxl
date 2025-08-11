@@ -1,0 +1,69 @@
+import px
+
+# Get script parameters
+start_time = "{{start_time}}"
+namespace = "{{namespace}}"
+pod = "{{pod}}"
+
+# Get process stats
+df = px.DataFrame('process_stats', start_time=start_time)
+
+# Add context
+df.namespace = df.ctx['namespace']
+df.pod = df.ctx['pod']
+df.container = df.ctx['container_name']
+df.node = df.ctx['node']
+
+# Apply filters if provided
+df = df[px.contains(df.namespace, namespace) | (namespace == "")]
+df = df[px.contains(df.pod, pod) | (pod == "")]
+
+# Calculate CPU usage percentage (approximate)
+df.cpu_usage_percent = df.cpu_utime_ns / 1000000000  # Convert to seconds
+
+# Convert memory to MB
+df.memory_rss_mb = df.rss_bytes / (1024 * 1024)
+df.memory_vsize_mb = df.vsize_bytes / (1024 * 1024)
+
+# Convert I/O to MB
+df.read_mb = df.read_bytes / (1024 * 1024)
+df.write_mb = df.write_bytes / (1024 * 1024)
+
+# Aggregate by pod and container
+pod_stats = df.groupby(['namespace', 'pod', 'container']).agg(
+    avg_cpu_usage=('cpu_usage_percent', px.mean),
+    max_cpu_usage=('cpu_usage_percent', px.max),
+    avg_memory_rss_mb=('memory_rss_mb', px.mean),
+    max_memory_rss_mb=('memory_rss_mb', px.max),
+    avg_memory_vsize_mb=('memory_vsize_mb', px.mean),
+    total_read_mb=('read_mb', px.sum),
+    total_write_mb=('write_mb', px.sum)
+)
+
+# Sort by memory usage
+pod_stats = pod_stats.orderby(['avg_memory_rss_mb'], ascending=[False])
+
+px.display(pod_stats, 'Resource Usage by Pod and Container')
+
+# Namespace level aggregation
+namespace_stats = df.groupby(['namespace']).agg(
+    pod_count=('pod', lambda x: px.distinct_count(x)),
+    total_cpu_usage=('cpu_usage_percent', px.sum),
+    total_memory_rss_mb=('memory_rss_mb', px.sum),
+    total_read_mb=('read_mb', px.sum),
+    total_write_mb=('write_mb', px.sum)
+)
+
+namespace_stats = namespace_stats.orderby(['total_memory_rss_mb'], ascending=[False])
+
+px.display(namespace_stats, 'Resource Usage by Namespace')
+
+# Time series for resource trends
+time_series = df.groupby(['time_']).agg(
+    total_cpu_usage=('cpu_usage_percent', px.sum),
+    total_memory_mb=('memory_rss_mb', px.sum),
+    total_read_mb=('read_mb', px.sum),
+    total_write_mb=('write_mb', px.sum)
+)
+
+px.display(time_series, 'Resource Usage Over Time')
