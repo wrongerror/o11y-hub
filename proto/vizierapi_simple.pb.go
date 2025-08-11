@@ -87,40 +87,97 @@ func (DataType) EnumDescriptor() ([]byte, []int) {
 type SemanticType int32
 
 const (
-	SemanticType_ST_UNSPECIFIED    SemanticType = 0
-	SemanticType_ST_NONE           SemanticType = 1
-	SemanticType_ST_TIME_NS        SemanticType = 2
-	SemanticType_ST_SERVICE_NAME   SemanticType = 300
-	SemanticType_ST_POD_NAME       SemanticType = 400
-	SemanticType_ST_NAMESPACE_NAME SemanticType = 700
-	SemanticType_ST_BYTES          SemanticType = 800
-	SemanticType_ST_PERCENT        SemanticType = 900
-	SemanticType_ST_DURATION_NS    SemanticType = 901
+	SemanticType_ST_UNSPECIFIED             SemanticType = 0
+	SemanticType_ST_NONE                    SemanticType = 1
+	SemanticType_ST_TIME_NS                 SemanticType = 2
+	SemanticType_ST_AGENT_UID               SemanticType = 100
+	SemanticType_ST_ASID                    SemanticType = 101
+	SemanticType_ST_UPID                    SemanticType = 200
+	SemanticType_ST_SERVICE_NAME            SemanticType = 300
+	SemanticType_ST_POD_NAME                SemanticType = 400
+	SemanticType_ST_POD_PHASE               SemanticType = 401
+	SemanticType_ST_POD_STATUS              SemanticType = 402
+	SemanticType_ST_NODE_NAME               SemanticType = 500
+	SemanticType_ST_CONTAINER_NAME          SemanticType = 600
+	SemanticType_ST_CONTAINER_STATE         SemanticType = 601
+	SemanticType_ST_CONTAINER_STATUS        SemanticType = 602
+	SemanticType_ST_NAMESPACE_NAME          SemanticType = 700
+	SemanticType_ST_BYTES                   SemanticType = 800
+	SemanticType_ST_PERCENT                 SemanticType = 900
+	SemanticType_ST_DURATION_NS             SemanticType = 901
+	SemanticType_ST_THROUGHPUT_PER_NS       SemanticType = 902
+	SemanticType_ST_THROUGHPUT_BYTES_PER_NS SemanticType = 903
+	SemanticType_ST_QUANTILES               SemanticType = 1000
+	SemanticType_ST_DURATION_NS_QUANTILES   SemanticType = 1001
+	SemanticType_ST_IP_ADDRESS              SemanticType = 1100
+	SemanticType_ST_PORT                    SemanticType = 1200
+	SemanticType_ST_HTTP_REQ_METHOD         SemanticType = 1300
+	SemanticType_ST_HTTP_RESP_STATUS        SemanticType = 1400
+	SemanticType_ST_HTTP_RESP_MESSAGE       SemanticType = 1500
+	SemanticType_ST_SCRIPT_REFERENCE        SemanticType = 3000
 )
 
 // Enum value maps for SemanticType.
 var (
 	SemanticType_name = map[int32]string{
-		0:   "ST_UNSPECIFIED",
-		1:   "ST_NONE",
-		2:   "ST_TIME_NS",
-		300: "ST_SERVICE_NAME",
-		400: "ST_POD_NAME",
-		700: "ST_NAMESPACE_NAME",
-		800: "ST_BYTES",
-		900: "ST_PERCENT",
-		901: "ST_DURATION_NS",
+		0:    "ST_UNSPECIFIED",
+		1:    "ST_NONE",
+		2:    "ST_TIME_NS",
+		100:  "ST_AGENT_UID",
+		101:  "ST_ASID",
+		200:  "ST_UPID",
+		300:  "ST_SERVICE_NAME",
+		400:  "ST_POD_NAME",
+		401:  "ST_POD_PHASE",
+		402:  "ST_POD_STATUS",
+		500:  "ST_NODE_NAME",
+		600:  "ST_CONTAINER_NAME",
+		601:  "ST_CONTAINER_STATE",
+		602:  "ST_CONTAINER_STATUS",
+		700:  "ST_NAMESPACE_NAME",
+		800:  "ST_BYTES",
+		900:  "ST_PERCENT",
+		901:  "ST_DURATION_NS",
+		902:  "ST_THROUGHPUT_PER_NS",
+		903:  "ST_THROUGHPUT_BYTES_PER_NS",
+		1000: "ST_QUANTILES",
+		1001: "ST_DURATION_NS_QUANTILES",
+		1100: "ST_IP_ADDRESS",
+		1200: "ST_PORT",
+		1300: "ST_HTTP_REQ_METHOD",
+		1400: "ST_HTTP_RESP_STATUS",
+		1500: "ST_HTTP_RESP_MESSAGE",
+		3000: "ST_SCRIPT_REFERENCE",
 	}
 	SemanticType_value = map[string]int32{
-		"ST_UNSPECIFIED":    0,
-		"ST_NONE":           1,
-		"ST_TIME_NS":        2,
-		"ST_SERVICE_NAME":   300,
-		"ST_POD_NAME":       400,
-		"ST_NAMESPACE_NAME": 700,
-		"ST_BYTES":          800,
-		"ST_PERCENT":        900,
-		"ST_DURATION_NS":    901,
+		"ST_UNSPECIFIED":             0,
+		"ST_NONE":                    1,
+		"ST_TIME_NS":                 2,
+		"ST_AGENT_UID":               100,
+		"ST_ASID":                    101,
+		"ST_UPID":                    200,
+		"ST_SERVICE_NAME":            300,
+		"ST_POD_NAME":                400,
+		"ST_POD_PHASE":               401,
+		"ST_POD_STATUS":              402,
+		"ST_NODE_NAME":               500,
+		"ST_CONTAINER_NAME":          600,
+		"ST_CONTAINER_STATE":         601,
+		"ST_CONTAINER_STATUS":        602,
+		"ST_NAMESPACE_NAME":          700,
+		"ST_BYTES":                   800,
+		"ST_PERCENT":                 900,
+		"ST_DURATION_NS":             901,
+		"ST_THROUGHPUT_PER_NS":       902,
+		"ST_THROUGHPUT_BYTES_PER_NS": 903,
+		"ST_QUANTILES":               1000,
+		"ST_DURATION_NS_QUANTILES":   1001,
+		"ST_IP_ADDRESS":              1100,
+		"ST_PORT":                    1200,
+		"ST_HTTP_REQ_METHOD":         1300,
+		"ST_HTTP_RESP_STATUS":        1400,
+		"ST_HTTP_RESP_MESSAGE":       1500,
+		"ST_SCRIPT_REFERENCE":        3000,
 	}
 )
 
@@ -151,19 +208,348 @@ func (SemanticType) EnumDescriptor() ([]byte, []int) {
 	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{1}
 }
 
-// Column definition
+// The UInt128 data message
+type UInt128 struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Low           uint64                 `protobuf:"varint,1,opt,name=low,proto3" json:"low,omitempty"`
+	High          uint64                 `protobuf:"varint,2,opt,name=high,proto3" json:"high,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UInt128) Reset() {
+	*x = UInt128{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UInt128) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UInt128) ProtoMessage() {}
+
+func (x *UInt128) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UInt128.ProtoReflect.Descriptor instead.
+func (*UInt128) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *UInt128) GetLow() uint64 {
+	if x != nil {
+		return x.Low
+	}
+	return 0
+}
+
+func (x *UInt128) GetHigh() uint64 {
+	if x != nil {
+		return x.High
+	}
+	return 0
+}
+
+// Boolean data column
+type BooleanColumn struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []bool                 `protobuf:"varint,1,rep,packed,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BooleanColumn) Reset() {
+	*x = BooleanColumn{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BooleanColumn) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BooleanColumn) ProtoMessage() {}
+
+func (x *BooleanColumn) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BooleanColumn.ProtoReflect.Descriptor instead.
+func (*BooleanColumn) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *BooleanColumn) GetData() []bool {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+// Int64 column data
+type Int64Column struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []int64                `protobuf:"varint,1,rep,packed,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Int64Column) Reset() {
+	*x = Int64Column{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Int64Column) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Int64Column) ProtoMessage() {}
+
+func (x *Int64Column) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Int64Column.ProtoReflect.Descriptor instead.
+func (*Int64Column) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Int64Column) GetData() []int64 {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+// Uint128 column data
+type UInt128Column struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []*UInt128             `protobuf:"bytes,1,rep,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UInt128Column) Reset() {
+	*x = UInt128Column{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UInt128Column) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UInt128Column) ProtoMessage() {}
+
+func (x *UInt128Column) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UInt128Column.ProtoReflect.Descriptor instead.
+func (*UInt128Column) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *UInt128Column) GetData() []*UInt128 {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+// Float64 column data
+type Float64Column struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []float64              `protobuf:"fixed64,1,rep,packed,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Float64Column) Reset() {
+	*x = Float64Column{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Float64Column) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Float64Column) ProtoMessage() {}
+
+func (x *Float64Column) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Float64Column.ProtoReflect.Descriptor instead.
+func (*Float64Column) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Float64Column) GetData() []float64 {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+// Time64 column data
+type Time64NSColumn struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []int64                `protobuf:"varint,1,rep,packed,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Time64NSColumn) Reset() {
+	*x = Time64NSColumn{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Time64NSColumn) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Time64NSColumn) ProtoMessage() {}
+
+func (x *Time64NSColumn) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Time64NSColumn.ProtoReflect.Descriptor instead.
+func (*Time64NSColumn) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Time64NSColumn) GetData() []int64 {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+// String data column - uses bytes for UTF-8 safety
+type StringColumn struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          [][]byte               `protobuf:"bytes,1,rep,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StringColumn) Reset() {
+	*x = StringColumn{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StringColumn) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StringColumn) ProtoMessage() {}
+
+func (x *StringColumn) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StringColumn.ProtoReflect.Descriptor instead.
+func (*StringColumn) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *StringColumn) GetData() [][]byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+// A single column of data
 type Column struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	ColumnName         string                 `protobuf:"bytes,1,opt,name=column_name,json=columnName,proto3" json:"column_name,omitempty"`
-	ColumnType         DataType               `protobuf:"varint,2,opt,name=column_type,json=columnType,proto3,enum=px.api.vizierpb.DataType" json:"column_type,omitempty"`
-	ColumnSemanticType SemanticType           `protobuf:"varint,3,opt,name=column_semantic_type,json=columnSemanticType,proto3,enum=px.api.vizierpb.SemanticType" json:"column_semantic_type,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to ColData:
+	//
+	//	*Column_BooleanData
+	//	*Column_Int64Data
+	//	*Column_Uint128Data
+	//	*Column_Time64NsData
+	//	*Column_Float64Data
+	//	*Column_StringData
+	ColData       isColumn_ColData `protobuf_oneof:"col_data"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Column) Reset() {
 	*x = Column{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[0]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -175,7 +561,7 @@ func (x *Column) String() string {
 func (*Column) ProtoMessage() {}
 
 func (x *Column) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[0]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -188,41 +574,121 @@ func (x *Column) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Column.ProtoReflect.Descriptor instead.
 func (*Column) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{0}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *Column) GetColumnName() string {
+func (x *Column) GetColData() isColumn_ColData {
 	if x != nil {
-		return x.ColumnName
+		return x.ColData
 	}
-	return ""
+	return nil
 }
 
-func (x *Column) GetColumnType() DataType {
+func (x *Column) GetBooleanData() *BooleanColumn {
 	if x != nil {
-		return x.ColumnType
+		if x, ok := x.ColData.(*Column_BooleanData); ok {
+			return x.BooleanData
+		}
 	}
-	return DataType_DATA_TYPE_UNKNOWN
+	return nil
 }
 
-func (x *Column) GetColumnSemanticType() SemanticType {
+func (x *Column) GetInt64Data() *Int64Column {
 	if x != nil {
-		return x.ColumnSemanticType
+		if x, ok := x.ColData.(*Column_Int64Data); ok {
+			return x.Int64Data
+		}
 	}
-	return SemanticType_ST_UNSPECIFIED
+	return nil
 }
 
-// Table relation/schema
+func (x *Column) GetUint128Data() *UInt128Column {
+	if x != nil {
+		if x, ok := x.ColData.(*Column_Uint128Data); ok {
+			return x.Uint128Data
+		}
+	}
+	return nil
+}
+
+func (x *Column) GetTime64NsData() *Time64NSColumn {
+	if x != nil {
+		if x, ok := x.ColData.(*Column_Time64NsData); ok {
+			return x.Time64NsData
+		}
+	}
+	return nil
+}
+
+func (x *Column) GetFloat64Data() *Float64Column {
+	if x != nil {
+		if x, ok := x.ColData.(*Column_Float64Data); ok {
+			return x.Float64Data
+		}
+	}
+	return nil
+}
+
+func (x *Column) GetStringData() *StringColumn {
+	if x != nil {
+		if x, ok := x.ColData.(*Column_StringData); ok {
+			return x.StringData
+		}
+	}
+	return nil
+}
+
+type isColumn_ColData interface {
+	isColumn_ColData()
+}
+
+type Column_BooleanData struct {
+	BooleanData *BooleanColumn `protobuf:"bytes,1,opt,name=boolean_data,json=booleanData,proto3,oneof"`
+}
+
+type Column_Int64Data struct {
+	Int64Data *Int64Column `protobuf:"bytes,2,opt,name=int64_data,json=int64Data,proto3,oneof"`
+}
+
+type Column_Uint128Data struct {
+	Uint128Data *UInt128Column `protobuf:"bytes,3,opt,name=uint128_data,json=uint128Data,proto3,oneof"`
+}
+
+type Column_Time64NsData struct {
+	Time64NsData *Time64NSColumn `protobuf:"bytes,4,opt,name=time64ns_data,json=time64nsData,proto3,oneof"`
+}
+
+type Column_Float64Data struct {
+	Float64Data *Float64Column `protobuf:"bytes,5,opt,name=float64_data,json=float64Data,proto3,oneof"`
+}
+
+type Column_StringData struct {
+	StringData *StringColumn `protobuf:"bytes,6,opt,name=string_data,json=stringData,proto3,oneof"`
+}
+
+func (*Column_BooleanData) isColumn_ColData() {}
+
+func (*Column_Int64Data) isColumn_ColData() {}
+
+func (*Column_Uint128Data) isColumn_ColData() {}
+
+func (*Column_Time64NsData) isColumn_ColData() {}
+
+func (*Column_Float64Data) isColumn_ColData() {}
+
+func (*Column_StringData) isColumn_ColData() {}
+
+// Relation describes the structure of a table
 type Relation struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Columns       []*Column              `protobuf:"bytes,1,rep,name=columns,proto3" json:"columns,omitempty"`
+	Columns       []*Relation_ColumnInfo `protobuf:"bytes,1,rep,name=columns,proto3" json:"columns,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Relation) Reset() {
 	*x = Relation{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[1]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -234,7 +700,7 @@ func (x *Relation) String() string {
 func (*Relation) ProtoMessage() {}
 
 func (x *Relation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[1]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -247,183 +713,31 @@ func (x *Relation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Relation.ProtoReflect.Descriptor instead.
 func (*Relation) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{1}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *Relation) GetColumns() []*Column {
+func (x *Relation) GetColumns() []*Relation_ColumnInfo {
 	if x != nil {
 		return x.Columns
 	}
 	return nil
 }
 
-// A single data value
-type Datum struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Val:
-	//
-	//	*Datum_BoolValue
-	//	*Datum_Int64Value
-	//	*Datum_Float64Value
-	//	*Datum_StringValue
-	//	*Datum_Time64NsValue
-	//	*Datum_Uint128Value
-	Val           isDatum_Val `protobuf_oneof:"val"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Datum) Reset() {
-	*x = Datum{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Datum) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Datum) ProtoMessage() {}
-
-func (x *Datum) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Datum.ProtoReflect.Descriptor instead.
-func (*Datum) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *Datum) GetVal() isDatum_Val {
-	if x != nil {
-		return x.Val
-	}
-	return nil
-}
-
-func (x *Datum) GetBoolValue() bool {
-	if x != nil {
-		if x, ok := x.Val.(*Datum_BoolValue); ok {
-			return x.BoolValue
-		}
-	}
-	return false
-}
-
-func (x *Datum) GetInt64Value() int64 {
-	if x != nil {
-		if x, ok := x.Val.(*Datum_Int64Value); ok {
-			return x.Int64Value
-		}
-	}
-	return 0
-}
-
-func (x *Datum) GetFloat64Value() float64 {
-	if x != nil {
-		if x, ok := x.Val.(*Datum_Float64Value); ok {
-			return x.Float64Value
-		}
-	}
-	return 0
-}
-
-func (x *Datum) GetStringValue() string {
-	if x != nil {
-		if x, ok := x.Val.(*Datum_StringValue); ok {
-			return x.StringValue
-		}
-	}
-	return ""
-}
-
-func (x *Datum) GetTime64NsValue() int64 {
-	if x != nil {
-		if x, ok := x.Val.(*Datum_Time64NsValue); ok {
-			return x.Time64NsValue
-		}
-	}
-	return 0
-}
-
-func (x *Datum) GetUint128Value() string {
-	if x != nil {
-		if x, ok := x.Val.(*Datum_Uint128Value); ok {
-			return x.Uint128Value
-		}
-	}
-	return ""
-}
-
-type isDatum_Val interface {
-	isDatum_Val()
-}
-
-type Datum_BoolValue struct {
-	BoolValue bool `protobuf:"varint,1,opt,name=bool_value,json=boolValue,proto3,oneof"`
-}
-
-type Datum_Int64Value struct {
-	Int64Value int64 `protobuf:"varint,2,opt,name=int64_value,json=int64Value,proto3,oneof"`
-}
-
-type Datum_Float64Value struct {
-	Float64Value float64 `protobuf:"fixed64,4,opt,name=float64_value,json=float64Value,proto3,oneof"`
-}
-
-type Datum_StringValue struct {
-	StringValue string `protobuf:"bytes,5,opt,name=string_value,json=stringValue,proto3,oneof"`
-}
-
-type Datum_Time64NsValue struct {
-	Time64NsValue int64 `protobuf:"varint,6,opt,name=time64_ns_value,json=time64NsValue,proto3,oneof"`
-}
-
-type Datum_Uint128Value struct {
-	// For UINT128, we'll use string representation for simplicity
-	Uint128Value string `protobuf:"bytes,7,opt,name=uint128_value,json=uint128Value,proto3,oneof"`
-}
-
-func (*Datum_BoolValue) isDatum_Val() {}
-
-func (*Datum_Int64Value) isDatum_Val() {}
-
-func (*Datum_Float64Value) isDatum_Val() {}
-
-func (*Datum_StringValue) isDatum_Val() {}
-
-func (*Datum_Time64NsValue) isDatum_Val() {}
-
-func (*Datum_Uint128Value) isDatum_Val() {}
-
-// A single row of data
+// RowBatchData contains the data for a particular row batch from the specified table
 type RowBatchData struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	TableId string                 `protobuf:"bytes,1,opt,name=table_id,json=tableId,proto3" json:"table_id,omitempty"`
-	// Each sub-array represents a column, with each element being a row value
-	Cols []*Column `protobuf:"bytes,2,rep,name=cols,proto3" json:"cols,omitempty"`
-	// Number of rows in this batch
-	NumRows int64 `protobuf:"varint,3,opt,name=num_rows,json=numRows,proto3" json:"num_rows,omitempty"`
-	// Each column's data as repeated values
-	Columns map[string]*ColumnData `protobuf:"bytes,4,rep,name=columns,proto3" json:"columns,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// End of stream indicator
-	Eos           bool `protobuf:"varint,5,opt,name=eos,proto3" json:"eos,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TableId       string                 `protobuf:"bytes,5,opt,name=table_id,json=tableId,proto3" json:"table_id,omitempty"`
+	Cols          []*Column              `protobuf:"bytes,1,rep,name=cols,proto3" json:"cols,omitempty"`
+	NumRows       int64                  `protobuf:"varint,2,opt,name=num_rows,json=numRows,proto3" json:"num_rows,omitempty"`
+	Eow           bool                   `protobuf:"varint,3,opt,name=eow,proto3" json:"eow,omitempty"`
+	Eos           bool                   `protobuf:"varint,4,opt,name=eos,proto3" json:"eos,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RowBatchData) Reset() {
 	*x = RowBatchData{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[3]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -435,7 +749,7 @@ func (x *RowBatchData) String() string {
 func (*RowBatchData) ProtoMessage() {}
 
 func (x *RowBatchData) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[3]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -448,7 +762,7 @@ func (x *RowBatchData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RowBatchData.ProtoReflect.Descriptor instead.
 func (*RowBatchData) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{3}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RowBatchData) GetTableId() string {
@@ -472,11 +786,11 @@ func (x *RowBatchData) GetNumRows() int64 {
 	return 0
 }
 
-func (x *RowBatchData) GetColumns() map[string]*ColumnData {
+func (x *RowBatchData) GetEow() bool {
 	if x != nil {
-		return x.Columns
+		return x.Eow
 	}
-	return nil
+	return false
 }
 
 func (x *RowBatchData) GetEos() bool {
@@ -486,29 +800,30 @@ func (x *RowBatchData) GetEos() bool {
 	return false
 }
 
-// Column data containing the actual values
-type ColumnData struct {
+// Status message for errors
+type Status struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Values        []*Datum               `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	Code          int32                  `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ColumnData) Reset() {
-	*x = ColumnData{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[4]
+func (x *Status) Reset() {
+	*x = Status{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ColumnData) String() string {
+func (x *Status) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ColumnData) ProtoMessage() {}
+func (*Status) ProtoMessage() {}
 
-func (x *ColumnData) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[4]
+func (x *Status) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -519,19 +834,140 @@ func (x *ColumnData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ColumnData.ProtoReflect.Descriptor instead.
-func (*ColumnData) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{4}
+// Deprecated: Use Status.ProtoReflect.Descriptor instead.
+func (*Status) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *ColumnData) GetValues() []*Datum {
+func (x *Status) GetCode() int32 {
 	if x != nil {
-		return x.Values
+		return x.Code
+	}
+	return 0
+}
+
+func (x *Status) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+// Query timing information
+type QueryTimingInfo struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	ExecutionTimeNs   int64                  `protobuf:"varint,1,opt,name=execution_time_ns,json=executionTimeNs,proto3" json:"execution_time_ns,omitempty"`
+	CompilationTimeNs int64                  `protobuf:"varint,2,opt,name=compilation_time_ns,json=compilationTimeNs,proto3" json:"compilation_time_ns,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *QueryTimingInfo) Reset() {
+	*x = QueryTimingInfo{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryTimingInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryTimingInfo) ProtoMessage() {}
+
+func (x *QueryTimingInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryTimingInfo.ProtoReflect.Descriptor instead.
+func (*QueryTimingInfo) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *QueryTimingInfo) GetExecutionTimeNs() int64 {
+	if x != nil {
+		return x.ExecutionTimeNs
+	}
+	return 0
+}
+
+func (x *QueryTimingInfo) GetCompilationTimeNs() int64 {
+	if x != nil {
+		return x.CompilationTimeNs
+	}
+	return 0
+}
+
+// Query execution statistics
+type QueryExecutionStats struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Timing           *QueryTimingInfo       `protobuf:"bytes,1,opt,name=timing,proto3" json:"timing,omitempty"`
+	BytesProcessed   int64                  `protobuf:"varint,2,opt,name=bytes_processed,json=bytesProcessed,proto3" json:"bytes_processed,omitempty"`
+	RecordsProcessed int64                  `protobuf:"varint,3,opt,name=records_processed,json=recordsProcessed,proto3" json:"records_processed,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *QueryExecutionStats) Reset() {
+	*x = QueryExecutionStats{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryExecutionStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryExecutionStats) ProtoMessage() {}
+
+func (x *QueryExecutionStats) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryExecutionStats.ProtoReflect.Descriptor instead.
+func (*QueryExecutionStats) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *QueryExecutionStats) GetTiming() *QueryTimingInfo {
+	if x != nil {
+		return x.Timing
 	}
 	return nil
 }
 
-// Query metadata describing a table
+func (x *QueryExecutionStats) GetBytesProcessed() int64 {
+	if x != nil {
+		return x.BytesProcessed
+	}
+	return 0
+}
+
+func (x *QueryExecutionStats) GetRecordsProcessed() int64 {
+	if x != nil {
+		return x.RecordsProcessed
+	}
+	return 0
+}
+
+// The metadata describing a particular table
 type QueryMetadata struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Relation      *Relation              `protobuf:"bytes,1,opt,name=relation,proto3" json:"relation,omitempty"`
@@ -543,7 +979,7 @@ type QueryMetadata struct {
 
 func (x *QueryMetadata) Reset() {
 	*x = QueryMetadata{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[5]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -555,7 +991,7 @@ func (x *QueryMetadata) String() string {
 func (*QueryMetadata) ProtoMessage() {}
 
 func (x *QueryMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[5]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -568,7 +1004,7 @@ func (x *QueryMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryMetadata.ProtoReflect.Descriptor instead.
 func (*QueryMetadata) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{5}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *QueryMetadata) GetRelation() *Relation {
@@ -592,83 +1028,11 @@ func (x *QueryMetadata) GetId() string {
 	return ""
 }
 
-// Execution statistics
-type QueryExecutionStats struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Execution time in nanoseconds
-	ExecutionTimeNs int64 `protobuf:"varint,1,opt,name=execution_time_ns,json=executionTimeNs,proto3" json:"execution_time_ns,omitempty"`
-	// Compilation time in nanoseconds
-	CompilationTimeNs int64 `protobuf:"varint,2,opt,name=compilation_time_ns,json=compilationTimeNs,proto3" json:"compilation_time_ns,omitempty"`
-	// Number of bytes processed
-	BytesProcessed int64 `protobuf:"varint,3,opt,name=bytes_processed,json=bytesProcessed,proto3" json:"bytes_processed,omitempty"`
-	// Number of records processed
-	RecordsProcessed int64 `protobuf:"varint,4,opt,name=records_processed,json=recordsProcessed,proto3" json:"records_processed,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *QueryExecutionStats) Reset() {
-	*x = QueryExecutionStats{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryExecutionStats) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryExecutionStats) ProtoMessage() {}
-
-func (x *QueryExecutionStats) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryExecutionStats.ProtoReflect.Descriptor instead.
-func (*QueryExecutionStats) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *QueryExecutionStats) GetExecutionTimeNs() int64 {
-	if x != nil {
-		return x.ExecutionTimeNs
-	}
-	return 0
-}
-
-func (x *QueryExecutionStats) GetCompilationTimeNs() int64 {
-	if x != nil {
-		return x.CompilationTimeNs
-	}
-	return 0
-}
-
-func (x *QueryExecutionStats) GetBytesProcessed() int64 {
-	if x != nil {
-		return x.BytesProcessed
-	}
-	return 0
-}
-
-func (x *QueryExecutionStats) GetRecordsProcessed() int64 {
-	if x != nil {
-		return x.RecordsProcessed
-	}
-	return 0
-}
-
-// Query data containing either row batch or execution stats
+// Data message containing either a row batch or execution stats
 type QueryData struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Batch          *RowBatchData          `protobuf:"bytes,1,opt,name=batch,proto3" json:"batch,omitempty"`
+	EncryptedBatch []byte                 `protobuf:"bytes,3,opt,name=encrypted_batch,json=encryptedBatch,proto3" json:"encrypted_batch,omitempty"`
 	ExecutionStats *QueryExecutionStats   `protobuf:"bytes,2,opt,name=execution_stats,json=executionStats,proto3" json:"execution_stats,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -676,7 +1040,7 @@ type QueryData struct {
 
 func (x *QueryData) Reset() {
 	*x = QueryData{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[7]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -688,7 +1052,7 @@ func (x *QueryData) String() string {
 func (*QueryData) ProtoMessage() {}
 
 func (x *QueryData) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[7]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -701,7 +1065,7 @@ func (x *QueryData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryData.ProtoReflect.Descriptor instead.
 func (*QueryData) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{7}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *QueryData) GetBatch() *RowBatchData {
@@ -711,64 +1075,18 @@ func (x *QueryData) GetBatch() *RowBatchData {
 	return nil
 }
 
+func (x *QueryData) GetEncryptedBatch() []byte {
+	if x != nil {
+		return x.EncryptedBatch
+	}
+	return nil
+}
+
 func (x *QueryData) GetExecutionStats() *QueryExecutionStats {
 	if x != nil {
 		return x.ExecutionStats
 	}
 	return nil
-}
-
-// Status message
-type Status struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          int32                  `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Status) Reset() {
-	*x = Status{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Status) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Status) ProtoMessage() {}
-
-func (x *Status) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Status.ProtoReflect.Descriptor instead.
-func (*Status) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *Status) GetCode() int32 {
-	if x != nil {
-		return x.Code
-	}
-	return 0
-}
-
-func (x *Status) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
 }
 
 // Execute script request
@@ -783,7 +1101,7 @@ type ExecuteScriptRequest struct {
 
 func (x *ExecuteScriptRequest) Reset() {
 	*x = ExecuteScriptRequest{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[9]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -795,7 +1113,7 @@ func (x *ExecuteScriptRequest) String() string {
 func (*ExecuteScriptRequest) ProtoMessage() {}
 
 func (x *ExecuteScriptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[9]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -808,7 +1126,7 @@ func (x *ExecuteScriptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteScriptRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteScriptRequest) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{9}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ExecuteScriptRequest) GetQueryStr() string {
@@ -832,7 +1150,7 @@ func (x *ExecuteScriptRequest) GetMutation() bool {
 	return false
 }
 
-// Execute script response - now with data capability
+// Execute script response - now with proper Pixie data capability
 type ExecuteScriptResponse struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Status  *Status                `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
@@ -848,7 +1166,7 @@ type ExecuteScriptResponse struct {
 
 func (x *ExecuteScriptResponse) Reset() {
 	*x = ExecuteScriptResponse{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[10]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -860,7 +1178,7 @@ func (x *ExecuteScriptResponse) String() string {
 func (*ExecuteScriptResponse) ProtoMessage() {}
 
 func (x *ExecuteScriptResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[10]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -873,7 +1191,7 @@ func (x *ExecuteScriptResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteScriptResponse.ProtoReflect.Descriptor instead.
 func (*ExecuteScriptResponse) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{10}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ExecuteScriptResponse) GetStatus() *Status {
@@ -941,7 +1259,7 @@ type HealthCheckRequest struct {
 
 func (x *HealthCheckRequest) Reset() {
 	*x = HealthCheckRequest{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[11]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -953,7 +1271,7 @@ func (x *HealthCheckRequest) String() string {
 func (*HealthCheckRequest) ProtoMessage() {}
 
 func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[11]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -966,7 +1284,7 @@ func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckRequest.ProtoReflect.Descriptor instead.
 func (*HealthCheckRequest) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{11}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *HealthCheckRequest) GetClusterId() string {
@@ -985,7 +1303,7 @@ type HealthCheckResponse struct {
 
 func (x *HealthCheckResponse) Reset() {
 	*x = HealthCheckResponse{}
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[12]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -997,7 +1315,7 @@ func (x *HealthCheckResponse) String() string {
 func (*HealthCheckResponse) ProtoMessage() {}
 
 func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_vizierapi_simple_proto_msgTypes[12]
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1010,7 +1328,7 @@ func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckResponse.ProtoReflect.Descriptor instead.
 func (*HealthCheckResponse) Descriptor() ([]byte, []int) {
-	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{12}
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *HealthCheckResponse) GetStatus() *Status {
@@ -1020,56 +1338,140 @@ func (x *HealthCheckResponse) GetStatus() *Status {
 	return nil
 }
 
+type Relation_ColumnInfo struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	ColumnName         string                 `protobuf:"bytes,1,opt,name=column_name,json=columnName,proto3" json:"column_name,omitempty"`
+	ColumnType         DataType               `protobuf:"varint,2,opt,name=column_type,json=columnType,proto3,enum=px.api.vizierpb.DataType" json:"column_type,omitempty"`
+	ColumnDesc         string                 `protobuf:"bytes,3,opt,name=column_desc,json=columnDesc,proto3" json:"column_desc,omitempty"`
+	ColumnSemanticType SemanticType           `protobuf:"varint,4,opt,name=column_semantic_type,json=columnSemanticType,proto3,enum=px.api.vizierpb.SemanticType" json:"column_semantic_type,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *Relation_ColumnInfo) Reset() {
+	*x = Relation_ColumnInfo{}
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Relation_ColumnInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Relation_ColumnInfo) ProtoMessage() {}
+
+func (x *Relation_ColumnInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_vizierapi_simple_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Relation_ColumnInfo.ProtoReflect.Descriptor instead.
+func (*Relation_ColumnInfo) Descriptor() ([]byte, []int) {
+	return file_proto_vizierapi_simple_proto_rawDescGZIP(), []int{8, 0}
+}
+
+func (x *Relation_ColumnInfo) GetColumnName() string {
+	if x != nil {
+		return x.ColumnName
+	}
+	return ""
+}
+
+func (x *Relation_ColumnInfo) GetColumnType() DataType {
+	if x != nil {
+		return x.ColumnType
+	}
+	return DataType_DATA_TYPE_UNKNOWN
+}
+
+func (x *Relation_ColumnInfo) GetColumnDesc() string {
+	if x != nil {
+		return x.ColumnDesc
+	}
+	return ""
+}
+
+func (x *Relation_ColumnInfo) GetColumnSemanticType() SemanticType {
+	if x != nil {
+		return x.ColumnSemanticType
+	}
+	return SemanticType_ST_UNSPECIFIED
+}
+
 var File_proto_vizierapi_simple_proto protoreflect.FileDescriptor
 
 const file_proto_vizierapi_simple_proto_rawDesc = "" +
 	"\n" +
-	"\x1cproto/vizierapi_simple.proto\x12\x0fpx.api.vizierpb\"\xb6\x01\n" +
-	"\x06Column\x12\x1f\n" +
+	"\x1cproto/vizierapi_simple.proto\x12\x0fpx.api.vizierpb\"/\n" +
+	"\aUInt128\x12\x10\n" +
+	"\x03low\x18\x01 \x01(\x04R\x03low\x12\x12\n" +
+	"\x04high\x18\x02 \x01(\x04R\x04high\"#\n" +
+	"\rBooleanColumn\x12\x12\n" +
+	"\x04data\x18\x01 \x03(\bR\x04data\"!\n" +
+	"\vInt64Column\x12\x12\n" +
+	"\x04data\x18\x01 \x03(\x03R\x04data\"=\n" +
+	"\rUInt128Column\x12,\n" +
+	"\x04data\x18\x01 \x03(\v2\x18.px.api.vizierpb.UInt128R\x04data\"#\n" +
+	"\rFloat64Column\x12\x12\n" +
+	"\x04data\x18\x01 \x03(\x01R\x04data\"$\n" +
+	"\x0eTime64NSColumn\x12\x12\n" +
+	"\x04data\x18\x01 \x03(\x03R\x04data\"\"\n" +
+	"\fStringColumn\x12\x12\n" +
+	"\x04data\x18\x01 \x03(\fR\x04data\"\xac\x03\n" +
+	"\x06Column\x12C\n" +
+	"\fboolean_data\x18\x01 \x01(\v2\x1e.px.api.vizierpb.BooleanColumnH\x00R\vbooleanData\x12=\n" +
+	"\n" +
+	"int64_data\x18\x02 \x01(\v2\x1c.px.api.vizierpb.Int64ColumnH\x00R\tint64Data\x12C\n" +
+	"\fuint128_data\x18\x03 \x01(\v2\x1e.px.api.vizierpb.UInt128ColumnH\x00R\vuint128Data\x12F\n" +
+	"\rtime64ns_data\x18\x04 \x01(\v2\x1f.px.api.vizierpb.Time64NSColumnH\x00R\ftime64nsData\x12C\n" +
+	"\ffloat64_data\x18\x05 \x01(\v2\x1e.px.api.vizierpb.Float64ColumnH\x00R\vfloat64Data\x12@\n" +
+	"\vstring_data\x18\x06 \x01(\v2\x1d.px.api.vizierpb.StringColumnH\x00R\n" +
+	"stringDataB\n" +
+	"\n" +
+	"\bcol_data\"\xa8\x02\n" +
+	"\bRelation\x12>\n" +
+	"\acolumns\x18\x01 \x03(\v2$.px.api.vizierpb.Relation.ColumnInfoR\acolumns\x1a\xdb\x01\n" +
+	"\n" +
+	"ColumnInfo\x12\x1f\n" +
 	"\vcolumn_name\x18\x01 \x01(\tR\n" +
 	"columnName\x12:\n" +
 	"\vcolumn_type\x18\x02 \x01(\x0e2\x19.px.api.vizierpb.DataTypeR\n" +
-	"columnType\x12O\n" +
-	"\x14column_semantic_type\x18\x03 \x01(\x0e2\x1d.px.api.vizierpb.SemanticTypeR\x12columnSemanticType\"=\n" +
-	"\bRelation\x121\n" +
-	"\acolumns\x18\x01 \x03(\v2\x17.px.api.vizierpb.ColumnR\acolumns\"\xef\x01\n" +
-	"\x05Datum\x12\x1f\n" +
-	"\n" +
-	"bool_value\x18\x01 \x01(\bH\x00R\tboolValue\x12!\n" +
-	"\vint64_value\x18\x02 \x01(\x03H\x00R\n" +
-	"int64Value\x12%\n" +
-	"\rfloat64_value\x18\x04 \x01(\x01H\x00R\ffloat64Value\x12#\n" +
-	"\fstring_value\x18\x05 \x01(\tH\x00R\vstringValue\x12(\n" +
-	"\x0ftime64_ns_value\x18\x06 \x01(\x03H\x00R\rtime64NsValue\x12%\n" +
-	"\ruint128_value\x18\a \x01(\tH\x00R\fuint128ValueB\x05\n" +
-	"\x03val\"\xa2\x02\n" +
+	"columnType\x12\x1f\n" +
+	"\vcolumn_desc\x18\x03 \x01(\tR\n" +
+	"columnDesc\x12O\n" +
+	"\x14column_semantic_type\x18\x04 \x01(\x0e2\x1d.px.api.vizierpb.SemanticTypeR\x12columnSemanticType\"\x95\x01\n" +
 	"\fRowBatchData\x12\x19\n" +
-	"\btable_id\x18\x01 \x01(\tR\atableId\x12+\n" +
-	"\x04cols\x18\x02 \x03(\v2\x17.px.api.vizierpb.ColumnR\x04cols\x12\x19\n" +
-	"\bnum_rows\x18\x03 \x01(\x03R\anumRows\x12D\n" +
-	"\acolumns\x18\x04 \x03(\v2*.px.api.vizierpb.RowBatchData.ColumnsEntryR\acolumns\x12\x10\n" +
-	"\x03eos\x18\x05 \x01(\bR\x03eos\x1aW\n" +
-	"\fColumnsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x121\n" +
-	"\x05value\x18\x02 \x01(\v2\x1b.px.api.vizierpb.ColumnDataR\x05value:\x028\x01\"<\n" +
-	"\n" +
-	"ColumnData\x12.\n" +
-	"\x06values\x18\x01 \x03(\v2\x16.px.api.vizierpb.DatumR\x06values\"j\n" +
+	"\btable_id\x18\x05 \x01(\tR\atableId\x12+\n" +
+	"\x04cols\x18\x01 \x03(\v2\x17.px.api.vizierpb.ColumnR\x04cols\x12\x19\n" +
+	"\bnum_rows\x18\x02 \x01(\x03R\anumRows\x12\x10\n" +
+	"\x03eow\x18\x03 \x01(\bR\x03eow\x12\x10\n" +
+	"\x03eos\x18\x04 \x01(\bR\x03eos\"6\n" +
+	"\x06Status\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\x05R\x04code\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"m\n" +
+	"\x0fQueryTimingInfo\x12*\n" +
+	"\x11execution_time_ns\x18\x01 \x01(\x03R\x0fexecutionTimeNs\x12.\n" +
+	"\x13compilation_time_ns\x18\x02 \x01(\x03R\x11compilationTimeNs\"\xa5\x01\n" +
+	"\x13QueryExecutionStats\x128\n" +
+	"\x06timing\x18\x01 \x01(\v2 .px.api.vizierpb.QueryTimingInfoR\x06timing\x12'\n" +
+	"\x0fbytes_processed\x18\x02 \x01(\x03R\x0ebytesProcessed\x12+\n" +
+	"\x11records_processed\x18\x03 \x01(\x03R\x10recordsProcessed\"j\n" +
 	"\rQueryMetadata\x125\n" +
 	"\brelation\x18\x01 \x01(\v2\x19.px.api.vizierpb.RelationR\brelation\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x0e\n" +
-	"\x02id\x18\x03 \x01(\tR\x02id\"\xc7\x01\n" +
-	"\x13QueryExecutionStats\x12*\n" +
-	"\x11execution_time_ns\x18\x01 \x01(\x03R\x0fexecutionTimeNs\x12.\n" +
-	"\x13compilation_time_ns\x18\x02 \x01(\x03R\x11compilationTimeNs\x12'\n" +
-	"\x0fbytes_processed\x18\x03 \x01(\x03R\x0ebytesProcessed\x12+\n" +
-	"\x11records_processed\x18\x04 \x01(\x03R\x10recordsProcessed\"\x8f\x01\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\"\xb8\x01\n" +
 	"\tQueryData\x123\n" +
-	"\x05batch\x18\x01 \x01(\v2\x1d.px.api.vizierpb.RowBatchDataR\x05batch\x12M\n" +
-	"\x0fexecution_stats\x18\x02 \x01(\v2$.px.api.vizierpb.QueryExecutionStatsR\x0eexecutionStats\"6\n" +
-	"\x06Status\x12\x12\n" +
-	"\x04code\x18\x01 \x01(\x05R\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"n\n" +
+	"\x05batch\x18\x01 \x01(\v2\x1d.px.api.vizierpb.RowBatchDataR\x05batch\x12'\n" +
+	"\x0fencrypted_batch\x18\x03 \x01(\fR\x0eencryptedBatch\x12M\n" +
+	"\x0fexecution_stats\x18\x02 \x01(\v2$.px.api.vizierpb.QueryExecutionStatsR\x0eexecutionStats\"n\n" +
 	"\x14ExecuteScriptRequest\x12\x1b\n" +
 	"\tquery_str\x18\x01 \x01(\tR\bqueryStr\x12\x1d\n" +
 	"\n" +
@@ -1094,19 +1496,40 @@ const file_proto_vizierapi_simple_proto_rawDesc = "" +
 	"\aFLOAT64\x10\x04\x12\n" +
 	"\n" +
 	"\x06STRING\x10\x05\x12\f\n" +
-	"\bTIME64NS\x10\x06*\xb4\x01\n" +
+	"\bTIME64NS\x10\x06*\xde\x04\n" +
 	"\fSemanticType\x12\x12\n" +
 	"\x0eST_UNSPECIFIED\x10\x00\x12\v\n" +
 	"\aST_NONE\x10\x01\x12\x0e\n" +
 	"\n" +
-	"ST_TIME_NS\x10\x02\x12\x14\n" +
+	"ST_TIME_NS\x10\x02\x12\x10\n" +
+	"\fST_AGENT_UID\x10d\x12\v\n" +
+	"\aST_ASID\x10e\x12\f\n" +
+	"\aST_UPID\x10\xc8\x01\x12\x14\n" +
 	"\x0fST_SERVICE_NAME\x10\xac\x02\x12\x10\n" +
-	"\vST_POD_NAME\x10\x90\x03\x12\x16\n" +
+	"\vST_POD_NAME\x10\x90\x03\x12\x11\n" +
+	"\fST_POD_PHASE\x10\x91\x03\x12\x12\n" +
+	"\rST_POD_STATUS\x10\x92\x03\x12\x11\n" +
+	"\fST_NODE_NAME\x10\xf4\x03\x12\x16\n" +
+	"\x11ST_CONTAINER_NAME\x10\xd8\x04\x12\x17\n" +
+	"\x12ST_CONTAINER_STATE\x10\xd9\x04\x12\x18\n" +
+	"\x13ST_CONTAINER_STATUS\x10\xda\x04\x12\x16\n" +
 	"\x11ST_NAMESPACE_NAME\x10\xbc\x05\x12\r\n" +
 	"\bST_BYTES\x10\xa0\x06\x12\x0f\n" +
 	"\n" +
 	"ST_PERCENT\x10\x84\a\x12\x13\n" +
-	"\x0eST_DURATION_NS\x10\x85\a2\xcd\x01\n" +
+	"\x0eST_DURATION_NS\x10\x85\a\x12\x19\n" +
+	"\x14ST_THROUGHPUT_PER_NS\x10\x86\a\x12\x1f\n" +
+	"\x1aST_THROUGHPUT_BYTES_PER_NS\x10\x87\a\x12\x11\n" +
+	"\fST_QUANTILES\x10\xe8\a\x12\x1d\n" +
+	"\x18ST_DURATION_NS_QUANTILES\x10\xe9\a\x12\x12\n" +
+	"\rST_IP_ADDRESS\x10\xcc\b\x12\f\n" +
+	"\aST_PORT\x10\xb0\t\x12\x17\n" +
+	"\x12ST_HTTP_REQ_METHOD\x10\x94\n" +
+	"\x12\x18\n" +
+	"\x13ST_HTTP_RESP_STATUS\x10\xf8\n" +
+	"\x12\x19\n" +
+	"\x14ST_HTTP_RESP_MESSAGE\x10\xdc\v\x12\x18\n" +
+	"\x13ST_SCRIPT_REFERENCE\x10\xb8\x172\xcd\x01\n" +
 	"\rVizierService\x12Z\n" +
 	"\vHealthCheck\x12#.px.api.vizierpb.HealthCheckRequest\x1a$.px.api.vizierpb.HealthCheckResponse0\x01\x12`\n" +
 	"\rExecuteScript\x12%.px.api.vizierpb.ExecuteScriptRequest\x1a&.px.api.vizierpb.ExecuteScriptResponse0\x01B/Z-github.com/wrongerror/observo-connector/protob\x06proto3"
@@ -1124,49 +1547,60 @@ func file_proto_vizierapi_simple_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_vizierapi_simple_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_proto_vizierapi_simple_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_proto_vizierapi_simple_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_proto_vizierapi_simple_proto_goTypes = []any{
 	(DataType)(0),                 // 0: px.api.vizierpb.DataType
 	(SemanticType)(0),             // 1: px.api.vizierpb.SemanticType
-	(*Column)(nil),                // 2: px.api.vizierpb.Column
-	(*Relation)(nil),              // 3: px.api.vizierpb.Relation
-	(*Datum)(nil),                 // 4: px.api.vizierpb.Datum
-	(*RowBatchData)(nil),          // 5: px.api.vizierpb.RowBatchData
-	(*ColumnData)(nil),            // 6: px.api.vizierpb.ColumnData
-	(*QueryMetadata)(nil),         // 7: px.api.vizierpb.QueryMetadata
-	(*QueryExecutionStats)(nil),   // 8: px.api.vizierpb.QueryExecutionStats
-	(*QueryData)(nil),             // 9: px.api.vizierpb.QueryData
-	(*Status)(nil),                // 10: px.api.vizierpb.Status
-	(*ExecuteScriptRequest)(nil),  // 11: px.api.vizierpb.ExecuteScriptRequest
-	(*ExecuteScriptResponse)(nil), // 12: px.api.vizierpb.ExecuteScriptResponse
-	(*HealthCheckRequest)(nil),    // 13: px.api.vizierpb.HealthCheckRequest
-	(*HealthCheckResponse)(nil),   // 14: px.api.vizierpb.HealthCheckResponse
-	nil,                           // 15: px.api.vizierpb.RowBatchData.ColumnsEntry
+	(*UInt128)(nil),               // 2: px.api.vizierpb.UInt128
+	(*BooleanColumn)(nil),         // 3: px.api.vizierpb.BooleanColumn
+	(*Int64Column)(nil),           // 4: px.api.vizierpb.Int64Column
+	(*UInt128Column)(nil),         // 5: px.api.vizierpb.UInt128Column
+	(*Float64Column)(nil),         // 6: px.api.vizierpb.Float64Column
+	(*Time64NSColumn)(nil),        // 7: px.api.vizierpb.Time64NSColumn
+	(*StringColumn)(nil),          // 8: px.api.vizierpb.StringColumn
+	(*Column)(nil),                // 9: px.api.vizierpb.Column
+	(*Relation)(nil),              // 10: px.api.vizierpb.Relation
+	(*RowBatchData)(nil),          // 11: px.api.vizierpb.RowBatchData
+	(*Status)(nil),                // 12: px.api.vizierpb.Status
+	(*QueryTimingInfo)(nil),       // 13: px.api.vizierpb.QueryTimingInfo
+	(*QueryExecutionStats)(nil),   // 14: px.api.vizierpb.QueryExecutionStats
+	(*QueryMetadata)(nil),         // 15: px.api.vizierpb.QueryMetadata
+	(*QueryData)(nil),             // 16: px.api.vizierpb.QueryData
+	(*ExecuteScriptRequest)(nil),  // 17: px.api.vizierpb.ExecuteScriptRequest
+	(*ExecuteScriptResponse)(nil), // 18: px.api.vizierpb.ExecuteScriptResponse
+	(*HealthCheckRequest)(nil),    // 19: px.api.vizierpb.HealthCheckRequest
+	(*HealthCheckResponse)(nil),   // 20: px.api.vizierpb.HealthCheckResponse
+	(*Relation_ColumnInfo)(nil),   // 21: px.api.vizierpb.Relation.ColumnInfo
 }
 var file_proto_vizierapi_simple_proto_depIdxs = []int32{
-	0,  // 0: px.api.vizierpb.Column.column_type:type_name -> px.api.vizierpb.DataType
-	1,  // 1: px.api.vizierpb.Column.column_semantic_type:type_name -> px.api.vizierpb.SemanticType
-	2,  // 2: px.api.vizierpb.Relation.columns:type_name -> px.api.vizierpb.Column
-	2,  // 3: px.api.vizierpb.RowBatchData.cols:type_name -> px.api.vizierpb.Column
-	15, // 4: px.api.vizierpb.RowBatchData.columns:type_name -> px.api.vizierpb.RowBatchData.ColumnsEntry
-	4,  // 5: px.api.vizierpb.ColumnData.values:type_name -> px.api.vizierpb.Datum
-	3,  // 6: px.api.vizierpb.QueryMetadata.relation:type_name -> px.api.vizierpb.Relation
-	5,  // 7: px.api.vizierpb.QueryData.batch:type_name -> px.api.vizierpb.RowBatchData
-	8,  // 8: px.api.vizierpb.QueryData.execution_stats:type_name -> px.api.vizierpb.QueryExecutionStats
-	10, // 9: px.api.vizierpb.ExecuteScriptResponse.status:type_name -> px.api.vizierpb.Status
-	9,  // 10: px.api.vizierpb.ExecuteScriptResponse.data:type_name -> px.api.vizierpb.QueryData
-	7,  // 11: px.api.vizierpb.ExecuteScriptResponse.meta_data:type_name -> px.api.vizierpb.QueryMetadata
-	10, // 12: px.api.vizierpb.HealthCheckResponse.status:type_name -> px.api.vizierpb.Status
-	6,  // 13: px.api.vizierpb.RowBatchData.ColumnsEntry.value:type_name -> px.api.vizierpb.ColumnData
-	13, // 14: px.api.vizierpb.VizierService.HealthCheck:input_type -> px.api.vizierpb.HealthCheckRequest
-	11, // 15: px.api.vizierpb.VizierService.ExecuteScript:input_type -> px.api.vizierpb.ExecuteScriptRequest
-	14, // 16: px.api.vizierpb.VizierService.HealthCheck:output_type -> px.api.vizierpb.HealthCheckResponse
-	12, // 17: px.api.vizierpb.VizierService.ExecuteScript:output_type -> px.api.vizierpb.ExecuteScriptResponse
-	16, // [16:18] is the sub-list for method output_type
-	14, // [14:16] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	2,  // 0: px.api.vizierpb.UInt128Column.data:type_name -> px.api.vizierpb.UInt128
+	3,  // 1: px.api.vizierpb.Column.boolean_data:type_name -> px.api.vizierpb.BooleanColumn
+	4,  // 2: px.api.vizierpb.Column.int64_data:type_name -> px.api.vizierpb.Int64Column
+	5,  // 3: px.api.vizierpb.Column.uint128_data:type_name -> px.api.vizierpb.UInt128Column
+	7,  // 4: px.api.vizierpb.Column.time64ns_data:type_name -> px.api.vizierpb.Time64NSColumn
+	6,  // 5: px.api.vizierpb.Column.float64_data:type_name -> px.api.vizierpb.Float64Column
+	8,  // 6: px.api.vizierpb.Column.string_data:type_name -> px.api.vizierpb.StringColumn
+	21, // 7: px.api.vizierpb.Relation.columns:type_name -> px.api.vizierpb.Relation.ColumnInfo
+	9,  // 8: px.api.vizierpb.RowBatchData.cols:type_name -> px.api.vizierpb.Column
+	13, // 9: px.api.vizierpb.QueryExecutionStats.timing:type_name -> px.api.vizierpb.QueryTimingInfo
+	10, // 10: px.api.vizierpb.QueryMetadata.relation:type_name -> px.api.vizierpb.Relation
+	11, // 11: px.api.vizierpb.QueryData.batch:type_name -> px.api.vizierpb.RowBatchData
+	14, // 12: px.api.vizierpb.QueryData.execution_stats:type_name -> px.api.vizierpb.QueryExecutionStats
+	12, // 13: px.api.vizierpb.ExecuteScriptResponse.status:type_name -> px.api.vizierpb.Status
+	16, // 14: px.api.vizierpb.ExecuteScriptResponse.data:type_name -> px.api.vizierpb.QueryData
+	15, // 15: px.api.vizierpb.ExecuteScriptResponse.meta_data:type_name -> px.api.vizierpb.QueryMetadata
+	12, // 16: px.api.vizierpb.HealthCheckResponse.status:type_name -> px.api.vizierpb.Status
+	0,  // 17: px.api.vizierpb.Relation.ColumnInfo.column_type:type_name -> px.api.vizierpb.DataType
+	1,  // 18: px.api.vizierpb.Relation.ColumnInfo.column_semantic_type:type_name -> px.api.vizierpb.SemanticType
+	19, // 19: px.api.vizierpb.VizierService.HealthCheck:input_type -> px.api.vizierpb.HealthCheckRequest
+	17, // 20: px.api.vizierpb.VizierService.ExecuteScript:input_type -> px.api.vizierpb.ExecuteScriptRequest
+	20, // 21: px.api.vizierpb.VizierService.HealthCheck:output_type -> px.api.vizierpb.HealthCheckResponse
+	18, // 22: px.api.vizierpb.VizierService.ExecuteScript:output_type -> px.api.vizierpb.ExecuteScriptResponse
+	21, // [21:23] is the sub-list for method output_type
+	19, // [19:21] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_proto_vizierapi_simple_proto_init() }
@@ -1174,15 +1608,15 @@ func file_proto_vizierapi_simple_proto_init() {
 	if File_proto_vizierapi_simple_proto != nil {
 		return
 	}
-	file_proto_vizierapi_simple_proto_msgTypes[2].OneofWrappers = []any{
-		(*Datum_BoolValue)(nil),
-		(*Datum_Int64Value)(nil),
-		(*Datum_Float64Value)(nil),
-		(*Datum_StringValue)(nil),
-		(*Datum_Time64NsValue)(nil),
-		(*Datum_Uint128Value)(nil),
+	file_proto_vizierapi_simple_proto_msgTypes[7].OneofWrappers = []any{
+		(*Column_BooleanData)(nil),
+		(*Column_Int64Data)(nil),
+		(*Column_Uint128Data)(nil),
+		(*Column_Time64NsData)(nil),
+		(*Column_Float64Data)(nil),
+		(*Column_StringData)(nil),
 	}
-	file_proto_vizierapi_simple_proto_msgTypes[10].OneofWrappers = []any{
+	file_proto_vizierapi_simple_proto_msgTypes[16].OneofWrappers = []any{
 		(*ExecuteScriptResponse_Data)(nil),
 		(*ExecuteScriptResponse_MetaData)(nil),
 	}
@@ -1192,7 +1626,7 @@ func file_proto_vizierapi_simple_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_vizierapi_simple_proto_rawDesc), len(file_proto_vizierapi_simple_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   14,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

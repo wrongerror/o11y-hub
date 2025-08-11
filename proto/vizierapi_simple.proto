@@ -20,86 +20,132 @@ enum SemanticType {
   ST_UNSPECIFIED = 0;
   ST_NONE = 1;
   ST_TIME_NS = 2;
+  ST_AGENT_UID = 100;
+  ST_ASID = 101;
+  ST_UPID = 200;
   ST_SERVICE_NAME = 300;
   ST_POD_NAME = 400;
+  ST_POD_PHASE = 401;
+  ST_POD_STATUS = 402;
+  ST_NODE_NAME = 500;
+  ST_CONTAINER_NAME = 600;
+  ST_CONTAINER_STATE = 601;
+  ST_CONTAINER_STATUS = 602;
   ST_NAMESPACE_NAME = 700;
   ST_BYTES = 800;
   ST_PERCENT = 900;
   ST_DURATION_NS = 901;
+  ST_THROUGHPUT_PER_NS = 902;
+  ST_THROUGHPUT_BYTES_PER_NS = 903;
+  ST_QUANTILES = 1000;
+  ST_DURATION_NS_QUANTILES = 1001;
+  ST_IP_ADDRESS = 1100;
+  ST_PORT = 1200;
+  ST_HTTP_REQ_METHOD = 1300;
+  ST_HTTP_RESP_STATUS = 1400;
+  ST_HTTP_RESP_MESSAGE = 1500;
+  ST_SCRIPT_REFERENCE = 3000;
 }
 
-// Column definition
+// The UInt128 data message
+message UInt128 {
+  uint64 low = 1;
+  uint64 high = 2;
+}
+
+// Boolean data column
+message BooleanColumn {
+  repeated bool data = 1;
+}
+
+// Int64 column data
+message Int64Column {
+  repeated int64 data = 1;
+}
+
+// Uint128 column data
+message UInt128Column {
+  repeated UInt128 data = 1;
+}
+
+// Float64 column data
+message Float64Column {
+  repeated double data = 1;
+}
+
+// Time64 column data
+message Time64NSColumn {
+  repeated int64 data = 1;
+}
+
+// String data column - uses bytes for UTF-8 safety
+message StringColumn {
+  repeated bytes data = 1;
+}
+
+// A single column of data
 message Column {
-  string column_name = 1;
-  DataType column_type = 2;
-  SemanticType column_semantic_type = 3;
-}
-
-// Table relation/schema
-message Relation {
-  repeated Column columns = 1;
-}
-
-// A single data value
-message Datum {
-  oneof val {
-    bool bool_value = 1;
-    int64 int64_value = 2;
-    double float64_value = 4;
-    string string_value = 5;
-    int64 time64_ns_value = 6;
-    // For UINT128, we'll use string representation for simplicity
-    string uint128_value = 7;
+  oneof col_data {
+    BooleanColumn boolean_data = 1;
+    Int64Column int64_data = 2;
+    UInt128Column uint128_data = 3;
+    Time64NSColumn time64ns_data = 4;
+    Float64Column float64_data = 5;
+    StringColumn string_data = 6;
   }
 }
 
-// A single row of data
+// Relation describes the structure of a table
+message Relation {
+  message ColumnInfo {
+    string column_name = 1;
+    DataType column_type = 2;
+    string column_desc = 3;
+    SemanticType column_semantic_type = 4;
+  }
+  repeated ColumnInfo columns = 1;
+}
+
+// RowBatchData contains the data for a particular row batch from the specified table
 message RowBatchData {
-  string table_id = 1;
-  // Each sub-array represents a column, with each element being a row value
-  repeated Column cols = 2;
-  // Number of rows in this batch
-  int64 num_rows = 3;
-  // Each column's data as repeated values
-  map<string, ColumnData> columns = 4;
-  // End of stream indicator
-  bool eos = 5;
+  string table_id = 5;
+  repeated Column cols = 1;
+  int64 num_rows = 2;
+  bool eow = 3;
+  bool eos = 4;
 }
 
-// Column data containing the actual values
-message ColumnData {
-  repeated Datum values = 1;
+// Status message for errors
+message Status {
+  int32 code = 1;
+  string message = 2;
 }
 
-// Query metadata describing a table
+// Query timing information
+message QueryTimingInfo {
+  int64 execution_time_ns = 1;
+  int64 compilation_time_ns = 2;
+}
+
+// Query execution statistics  
+message QueryExecutionStats {
+  QueryTimingInfo timing = 1;
+  int64 bytes_processed = 2;
+  int64 records_processed = 3;
+}
+
+// The metadata describing a particular table
 message QueryMetadata {
   Relation relation = 1;
   string name = 2;
   string id = 3;
 }
 
-// Execution statistics
-message QueryExecutionStats {
-  // Execution time in nanoseconds
-  int64 execution_time_ns = 1;
-  // Compilation time in nanoseconds  
-  int64 compilation_time_ns = 2;
-  // Number of bytes processed
-  int64 bytes_processed = 3;
-  // Number of records processed
-  int64 records_processed = 4;
-}
-
-// Query data containing either row batch or execution stats
+// Data message containing either a row batch or execution stats
 message QueryData {
   RowBatchData batch = 1;
+  bytes encrypted_batch = 3;
   QueryExecutionStats execution_stats = 2;
-}
-
-// Status message
-message Status {
-  int32 code = 1;
-  string message = 2;
 }
 
 // Execute script request
@@ -109,7 +155,7 @@ message ExecuteScriptRequest {
   bool mutation = 5;
 }
 
-// Execute script response - now with data capability
+// Execute script response - now with proper Pixie data capability
 message ExecuteScriptResponse {
   Status status = 1;
   string query_id = 2;

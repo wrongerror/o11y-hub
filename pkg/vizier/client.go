@@ -407,7 +407,14 @@ func (c *Client) extractDataFromResponses(stream pb.VizierService_ExecuteScriptC
 				"table_id":     metadata.Id,
 				"table_name":   metadata.Name,
 				"column_count": len(metadata.Relation.Columns),
-			}).Debug("Received table metadata")
+				"column_details": func() []string {
+					var details []string
+					for _, col := range metadata.Relation.Columns {
+						details = append(details, fmt.Sprintf("%s(%s)", col.ColumnName, col.ColumnType.String()))
+					}
+					return details
+				}(),
+			}).Info("Received table metadata")
 
 		case *pb.ExecuteScriptResponse_Data:
 			// Handle actual data
@@ -441,11 +448,12 @@ func (c *Client) extractDataFromResponses(stream pb.VizierService_ExecuteScriptC
 			// Handle execution stats
 			if result.Data.ExecutionStats != nil {
 				stats := result.Data.ExecutionStats
+				timing := stats.GetTiming()
 				c.logger.WithFields(logrus.Fields{
-					"execution_time_ns":   stats.ExecutionTimeNs,
-					"compilation_time_ns": stats.CompilationTimeNs,
-					"bytes_processed":     stats.BytesProcessed,
-					"records_processed":   stats.RecordsProcessed,
+					"execution_time_ns":   timing.GetExecutionTimeNs(),
+					"compilation_time_ns": timing.GetCompilationTimeNs(),
+					"bytes_processed":     stats.GetBytesProcessed(),
+					"records_processed":   stats.GetRecordsProcessed(),
 				}).Debug("Received execution stats")
 			}
 
@@ -463,6 +471,8 @@ func (c *Client) extractDataFromResponses(stream pb.VizierService_ExecuteScriptC
 		"response_count": responseCount,
 		"columns":        len(columns),
 		"rows":           len(rows),
+		"raw_data":       fmt.Sprintf("%+v", rows),
+		"column_names":   columns,
 	}).Info("Data extraction completed")
 
 	return result, nil
@@ -536,7 +546,7 @@ func (c *Client) generateMockDataFromQuery(query string) []map[string]interface{
 }
 
 // parseBatchData converts RowBatchData protobuf to structured rows using column metadata
-func (c *Client) parseBatchData(batchData *pb.RowBatchData, columns []*pb.Column) ([]map[string]interface{}, error) {
+func (c *Client) parseBatchData(batchData *pb.RowBatchData, columns []*pb.Relation_ColumnInfo) ([]map[string]interface{}, error) {
 	if batchData == nil || len(columns) == 0 {
 		return []map[string]interface{}{}, nil
 	}
@@ -549,55 +559,59 @@ func (c *Client) parseBatchData(batchData *pb.RowBatchData, columns []*pb.Column
 		return []map[string]interface{}{}, nil
 	}
 
-	// Use the columns map for data access if available
-	columnDataMap := batchData.GetColumns()
-	if len(columnDataMap) == 0 {
-		// Fallback: no data available
-		return []map[string]interface{}{}, nil
+	// Check if we have column data
+	batchCols := batchData.GetCols()
+	if len(batchCols) != len(columns) {
+		return nil, fmt.Errorf("column count mismatch: expected %d, got %d", len(columns), len(batchCols))
 	}
 
 	// Convert column-wise data to row-wise data
 	for rowIdx := 0; rowIdx < numRows; rowIdx++ {
 		row := make(map[string]interface{})
 
-		for _, column := range columns {
-			columnName := column.GetColumnName()
-			columnData := columnDataMap[columnName]
-
-			if columnData == nil || columnData.GetValues() == nil {
+		for colIdx, columnInfo := range columns {
+			columnName := columnInfo.GetColumnName()
+			if colIdx >= len(batchCols) {
 				row[columnName] = nil
 				continue
 			}
 
-			values := columnData.GetValues()
-			if rowIdx >= len(values) {
+			col := batchCols[colIdx]
+			if col == nil {
 				row[columnName] = nil
 				continue
 			}
 
-			datum := values[rowIdx]
-			if datum == nil {
-				row[columnName] = nil
-				continue
-			}
-
-			// Extract value based on datum type
+			// Extract value based on column data type using the oneof structure
 			var value interface{}
-			switch v := datum.Val.(type) {
-			case *pb.Datum_BoolValue:
-				value = v.BoolValue
-			case *pb.Datum_Int64Value:
-				value = v.Int64Value
-			case *pb.Datum_Uint128Value:
-				// UInt128 is stored as string in protobuf
-				value = v.Uint128Value
-			case *pb.Datum_Float64Value:
-				value = v.Float64Value
-			case *pb.Datum_StringValue:
-				value = v.StringValue
-			case *pb.Datum_Time64NsValue:
-				// Convert nanoseconds to Unix timestamp
-				value = v.Time64NsValue / 1e9
+			switch colData := col.ColData.(type) {
+			case *pb.Column_BooleanData:
+				if data := colData.BooleanData.GetData(); rowIdx < len(data) {
+					value = data[rowIdx]
+				}
+			case *pb.Column_Int64Data:
+				if data := colData.Int64Data.GetData(); rowIdx < len(data) {
+					value = data[rowIdx]
+				}
+			case *pb.Column_Uint128Data:
+				if data := colData.Uint128Data.GetData(); rowIdx < len(data) && data[rowIdx] != nil {
+					// Convert UInt128 to string for JSON compatibility
+					value = fmt.Sprintf("%d%016x", data[rowIdx].High, data[rowIdx].Low)
+				}
+			case *pb.Column_Float64Data:
+				if data := colData.Float64Data.GetData(); rowIdx < len(data) {
+					value = data[rowIdx]
+				}
+			case *pb.Column_StringData:
+				if data := colData.StringData.GetData(); rowIdx < len(data) {
+					// Convert bytes to string safely
+					value = string(data[rowIdx])
+				}
+			case *pb.Column_Time64NsData:
+				if data := colData.Time64NsData.GetData(); rowIdx < len(data) {
+					// Convert nanoseconds to Unix timestamp
+					value = data[rowIdx] / 1e9
+				}
 			default:
 				value = nil
 			}

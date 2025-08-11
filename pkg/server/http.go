@@ -105,6 +105,7 @@ func (s *Server) setupRoutes() {
 
 	// 脚本执行接口
 	api.HandleFunc("/execute", s.handleExecuteScript).Methods("POST")
+	api.HandleFunc("/execute-data", s.handleExecuteScriptWithData).Methods("POST")
 	api.HandleFunc("/scripts", s.handleListScripts).Methods("GET")
 	api.HandleFunc("/scripts/{name}", s.handleGetScript).Methods("GET")
 
@@ -432,6 +433,61 @@ func (s *Server) handleExecuteScript(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"message": "Script executed successfully",
+	})
+}
+
+// handleExecuteScriptWithData 处理脚本执行请求并返回解析后的数据
+func (s *Server) handleExecuteScriptWithData(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Script    string            `json:"script"`
+		ClusterID string            `json:"cluster_id,omitempty"`
+		Params    map[string]string `json:"params,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	clusterID := req.ClusterID
+	if clusterID == "" {
+		clusterID = s.defaultClusterID
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	// Check if this is a script name (builtin or file-based) or raw PxL code
+	var result *common.QueryResult
+	var err error
+
+	if s.isScriptName(req.Script) {
+		// Execute as a named script with parameters and get data
+		result, err = s.scriptExecutor.ExecuteBuiltinScriptForMetrics(ctx, clusterID, req.Script, req.Params)
+		if err != nil {
+			s.logger.WithError(err).Error("Failed to execute script for data")
+			http.Error(w, fmt.Sprintf("Script execution failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// Execute as raw PxL code and get data
+		result, err = s.vizierClient.ExecuteScriptAndExtractData(ctx, clusterID, req.Script)
+		if err != nil {
+			s.logger.WithError(err).Error("Failed to execute script for data")
+			http.Error(w, fmt.Sprintf("Script execution failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":     true,
+		"message":     "Script executed successfully",
+		"data":        result.Data,
+		"row_count":   len(result.Data),
+		"executed_at": result.ExecutedAt,
+		"duration":    result.Duration.String(),
+		"metadata":    result.Metadata,
 	})
 }
 
