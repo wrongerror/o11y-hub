@@ -50,7 +50,6 @@ observo-connector/
 │   ├── vizierapi_simple.pb.go     # 生成的protobuf代码
 │   └── vizierapi_simple_grpc.pb.go # 生成的gRPC代码
 ├── certs/                  # 证书文件目录
-├── config.example.yaml     # 配置文件示例
 ├── go.mod
 ├── Makefile
 ├── test.sh               # 测试脚本
@@ -77,38 +76,33 @@ cd observo-connector
 make build
 ```
 
-### 3. 配置
-
-复制示例配置文件并修改：
-
-```bash
-cp config.example.yaml config.yaml
-# 编辑config.yaml以匹配你的环境
-```
-
-### 4. 运行
+### 3. 运行
 
 #### 命令行模式
 
 ```bash
 # 健康检查
-./observo-connector health --cluster-id=my-cluster --address=localhost:50051
+./observo-connector health \
+  --cluster-id=my-cluster \
+  --address=localhost:50051 \
+  --skip-verify=true
 
 # 执行查询
-./observo-connector query "dx.display_name" --cluster-id=my-cluster
-
-# 使用配置文件
-./observo-connector query "dx.display_name" --config=config.yaml
+./observo-connector query "dx.display_name" \
+  --cluster-id=my-cluster \
+  --address=localhost:50051 \
+  --skip-verify=true
 ```
 
 #### HTTP服务器模式
 
 ```bash
 # 启动HTTP API服务器
-./observo-connector server --port=8080 --cluster-id=my-cluster
-
-# 使用配置文件启动
-./observo-connector server --config=config.yaml
+./observo-connector server \
+  --port=8080 \
+  --cluster-id=my-cluster \
+  --address=localhost:50051 \
+  --skip-verify=true
 ```
 
 ## HTTP API接口
@@ -376,8 +370,11 @@ docker build -t observo-connector .
 # 运行容器
 docker run -p 8080:8080 \
   -v $(pwd)/certs:/app/certs \
-  -v $(pwd)/config.yaml:/app/config.yaml \
-  observo-connector server --config=/app/config.yaml
+  observo-connector server \
+  --port=8080 \
+  --cluster-id=my-cluster \
+  --address=localhost:50051 \
+  --skip-verify=true
 ```
 
 ## 开发
