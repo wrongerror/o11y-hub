@@ -14,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/wrongerror/observo-connector/pkg/common"
+	"github.com/wrongerror/observo-connector/pkg/export"
 	"github.com/wrongerror/observo-connector/pkg/scripts"
 	"github.com/wrongerror/observo-connector/pkg/vizier"
 )
@@ -94,14 +95,14 @@ func (s *Server) setupRoutes() {
 	// Prometheus metrics endpoint - 使用标准的/metrics路径
 	s.router.Path("/metrics").Handler(promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{}))
 
-	// 为了兼容性，也提供/api/v1/metrics路径
-	s.router.Path("/api/v1/metrics").Handler(promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{}))
-
 	// API路由
 	api := s.router.PathPrefix("/api/v1").Subrouter()
 
 	// 健康检查
 	api.HandleFunc("/health", s.handleHealth).Methods("GET")
+
+	// 自定义metrics端点，支持脚本参数
+	api.HandleFunc("/metrics", s.handleMetrics).Methods("GET")
 
 	// 脚本执行接口
 	api.HandleFunc("/execute", s.handleExecuteScript).Methods("POST")
@@ -240,19 +241,67 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	s.writeJSONResponse(w, http.StatusOK, response)
 }
 
-// handleMetrics 处理Prometheus metrics请求 - 简化版本
+// handleMetrics 处理Prometheus metrics请求
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	// 暂时返回静态的Prometheus格式数据
-	// 真正的Prometheus metrics由/metrics端点通过SDK提供
+	ctx := r.Context()
 
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	w.Write([]byte(`# HELP observo_connector_up Whether the connector is up
-# TYPE observo_connector_up gauge
-observo_connector_up 1
-# HELP observo_connector_build_info Build information
+	// 解析查询参数
+	query := r.URL.Query()
+	script := query.Get("script")
+	clusterID := query.Get("cluster_id")
+	if clusterID == "" {
+		clusterID = s.defaultClusterID
+	}
+
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8; escaping=underscores")
+
+	// 首先写入基础指标
+	baseMetrics := `# HELP observo_connector_build_info Build information
 # TYPE observo_connector_build_info gauge
 observo_connector_build_info{version="dev"} 1
-`))
+# HELP observo_connector_up Whether the connector is up
+# TYPE observo_connector_up gauge
+observo_connector_up 1
+`
+	w.Write([]byte(baseMetrics))
+
+	// 如果指定了脚本，执行并返回脚本指标
+	if script != "" {
+		s.logger.WithFields(logrus.Fields{
+			"script":     script,
+			"cluster_id": clusterID,
+		}).Info("Executing script for metrics")
+
+		// 构建脚本参数
+		params := make(map[string]string)
+		for key, values := range query {
+			if key != "script" && key != "cluster_id" && len(values) > 0 {
+				params[key] = values[0]
+			}
+		}
+
+		// 执行脚本获取数据
+		result, err := s.scriptExecutor.ExecuteBuiltinScriptForMetrics(ctx, clusterID, script, params)
+		if err != nil {
+			s.logger.WithError(err).Error("Failed to execute script for metrics")
+			// 写入错误指标
+			errorMetric := fmt.Sprintf("# HELP observo_connector_script_errors_total Script execution errors\n# TYPE observo_connector_script_errors_total counter\nobservo_connector_script_errors_total{script=\"%s\"} 1\n", script)
+			w.Write([]byte(errorMetric))
+			return
+		}
+
+		// 转换结果为Prometheus格式
+		if result != nil && len(result.Metrics) > 0 {
+			// 使用现有的PrometheusExporter
+			exporter := &export.PrometheusExporter{}
+			metricsData, err := exporter.Export(result, common.ExportOptions{})
+			if err != nil {
+				s.logger.WithError(err).Error("Failed to convert metrics to Prometheus format")
+				return
+			}
+			w.Write(metricsData)
+		}
+	}
 }
 
 // getServerMetrics returns basic server health metrics
