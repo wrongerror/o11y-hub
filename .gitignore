@@ -5,6 +5,8 @@
 *.so
 *.dylib
 observo-connector
+main
+bin/main
 
 # Test binary, built with `go test -c`
 *.test
@@ -42,8 +44,11 @@ certs/*.p12
 certs/*.pfx
 !certs/.gitkeep
 
-# Logs
+# Logs and runtime files
 *.log
+*.pid
+server.log
+server.pid
 
 # Environment files
 .env
@@ -61,3 +66,19 @@ build/
 config.yaml
 config.json
 *.local.*
+
+# Test and development artifacts
+test*.sh
+*test*.sh
+test_*.sh
+quick_test_*.sh
+*_test_*.sh
+test_*.md
+*_test.md
+
+# Development backup files
+*_clean.*
+*_new.*
+*_old.*
+*_backup.*
+*.backup
