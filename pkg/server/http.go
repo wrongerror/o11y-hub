@@ -548,13 +548,16 @@ func (s *Server) isScriptName(script string) bool {
 
 // handleListScripts 处理列出脚本请求 - 简化版本
 func (s *Server) handleListScripts(w http.ResponseWriter, r *http.Request) {
-	// Return a basic list of available scripts
-	scripts := []string{"http_overview", "resource_usage", "network_stats", "error_analysis"}
+	// Get script names from BuiltinScripts map
+	scriptNames := make([]string, 0, len(scripts.BuiltinScripts))
+	for name := range scripts.BuiltinScripts {
+		scriptNames = append(scriptNames, name)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"scripts": scripts,
+		"scripts": scriptNames,
 	})
 }
 
