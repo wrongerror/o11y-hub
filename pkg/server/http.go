@@ -548,9 +548,10 @@ func (s *Server) isScriptName(script string) bool {
 
 // handleListScripts 处理列出脚本请求 - 简化版本
 func (s *Server) handleListScripts(w http.ResponseWriter, r *http.Request) {
-	// Get script names from BuiltinScripts map
-	scriptNames := make([]string, 0, len(scripts.BuiltinScripts))
-	for name := range scripts.BuiltinScripts {
+	// Get script names from script manager via script executor
+	scriptInfos := s.scriptExecutor.ListBuiltinScripts()
+	scriptNames := make([]string, 0, len(scriptInfos))
+	for name := range scriptInfos {
 		scriptNames = append(scriptNames, name)
 	}
 

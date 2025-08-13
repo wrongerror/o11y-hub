@@ -28,74 +28,49 @@ func NewExecutor(client *vizier.Client, logger *logrus.Logger) *Executor {
 	// Initialize script manager with default scripts directory
 	executor.scriptManager = NewScriptManager("./scripts")
 
-	// Load scripts on startup
+	// Load all scripts (builtin + file system)
 	if err := executor.scriptManager.LoadScripts(); err != nil {
-		logger.WithError(err).Warn("Failed to load some scripts from directory, falling back to builtin scripts")
+		logger.WithError(err).Error("Failed to load scripts")
+	} else {
+		scripts := executor.scriptManager.ListScripts()
+		logger.WithField("script_count", len(scripts)).Info("Scripts loaded successfully")
 	}
 
 	return executor
 }
 
-// ExecuteBuiltinScript executes a script by name with parameters
+// ExecuteBuiltinScript executes a script by name with parameters (now uses ScriptManager for all scripts)
 func (e *Executor) ExecuteBuiltinScript(ctx context.Context, clusterID, scriptName string, params map[string]string) error {
-	// Try to get script from script manager first
+	// Get script from unified script manager
 	script, err := e.scriptManager.GetScript(scriptName)
 	if err != nil {
-		// Fall back to builtin scripts
-		return e.executeBuiltinScriptLegacy(ctx, clusterID, scriptName, params)
+		e.logger.WithError(err).WithField("script_name", scriptName).Error("Script not found")
+		return fmt.Errorf("script not found: %s", scriptName)
 	}
 
 	e.logger.WithFields(logrus.Fields{
 		"script_name": scriptName,
 		"description": script.Short,
 		"category":    script.Category,
+		"is_builtin":  script.IsBuiltin,
 		"parameters":  params,
-	}).Info("Executing script from file")
+	}).Info("Executing script")
 
-	// Render the script with parameters
+	// Execute the script using the script manager
 	renderedScript, err := e.scriptManager.ExecuteScript(scriptName, params)
 	if err != nil {
-		return fmt.Errorf("failed to render script: %w", err)
+		return fmt.Errorf("failed to render script template: %w", err)
 	}
-
-	e.logger.WithField("rendered_script", renderedScript).Debug("Rendered script")
 
 	// Execute the script
 	return e.client.ExecuteScript(ctx, clusterID, renderedScript)
 }
 
-// executeBuiltinScriptLegacy executes a builtin script using the legacy method
-func (e *Executor) executeBuiltinScriptLegacy(ctx context.Context, clusterID, scriptName string, params map[string]string) error {
-	// Get the script template from builtin scripts
-	script, exists := BuiltinScripts[scriptName]
-	if !exists {
-		return fmt.Errorf("script '%s' not found in both file system and builtin scripts", scriptName)
-	}
-
-	e.logger.WithFields(logrus.Fields{
-		"script_name": scriptName,
-		"description": script.Description,
-		"category":    script.Category,
-		"parameters":  params,
-	}).Info("Executing builtin script (legacy)")
-
-	// Render the script with parameters
-	renderedScript, err := script.Execute(params)
-	if err != nil {
-		return fmt.Errorf("failed to render script: %w", err)
-	}
-
-	e.logger.WithField("rendered_script", renderedScript).Debug("Rendered script")
-
-	// Execute the script
-	return e.client.ExecuteScript(ctx, clusterID, renderedScript)
-}
-
-// ListBuiltinScripts returns information about all available scripts
+// ListBuiltinScripts returns information about all available scripts (now from ScriptManager)
 func (e *Executor) ListBuiltinScripts() map[string]ScriptInfo {
 	result := make(map[string]ScriptInfo)
 
-	// Get scripts from script manager first
+	// Get all scripts from script manager
 	for _, name := range e.scriptManager.ListScripts() {
 		script, err := e.scriptManager.GetScript(name)
 		if err != nil {
@@ -121,18 +96,6 @@ func (e *Executor) ListBuiltinScripts() map[string]ScriptInfo {
 		}
 	}
 
-	// Add builtin scripts as fallback
-	for name, script := range BuiltinScripts {
-		if _, exists := result[name]; !exists {
-			result[name] = ScriptInfo{
-				Name:        script.Name,
-				Description: script.Description,
-				Category:    script.Category,
-				Parameters:  script.Parameters,
-			}
-		}
-	}
-
 	return result
 }
 
@@ -146,87 +109,51 @@ type ScriptInfo struct {
 
 // GetScriptHelp returns detailed help for a specific script
 func (e *Executor) GetScriptHelp(scriptName string) (*ScriptInfo, error) {
-	// Try to get script from script manager first
+	// Get script from script manager
 	script, err := e.scriptManager.GetScript(scriptName)
-	if err == nil {
-		var params []Parameter
-		for _, p := range script.Parameters {
-			params = append(params, Parameter{
-				Name:         p.Name,
-				Type:         p.Type,
-				Description:  p.Description,
-				DefaultValue: fmt.Sprintf("%v", p.Default),
-				Required:     p.Required,
-			})
-		}
-
-		return &ScriptInfo{
-			Name:        script.Name,
-			Description: script.Short,
-			Category:    script.Category,
-			Parameters:  params,
-		}, nil
-	}
-
-	// Fall back to builtin scripts
-	builtinScript, exists := BuiltinScripts[scriptName]
-	if !exists {
+	if err != nil {
 		return nil, fmt.Errorf("script '%s' not found", scriptName)
 	}
 
+	var params []Parameter
+	for _, p := range script.Parameters {
+		params = append(params, Parameter{
+			Name:         p.Name,
+			Type:         p.Type,
+			Description:  p.Description,
+			DefaultValue: fmt.Sprintf("%v", p.Default),
+			Required:     p.Required,
+		})
+	}
+
 	return &ScriptInfo{
-		Name:        builtinScript.Name,
-		Description: builtinScript.Description,
-		Category:    builtinScript.Category,
-		Parameters:  builtinScript.Parameters,
+		Name:        script.Name,
+		Description: script.Short,
+		Category:    script.Category,
+		Parameters:  params,
 	}, nil
 }
 
 // ExecuteBuiltinScriptForMetrics executes a script and returns structured data for metrics conversion
 func (e *Executor) ExecuteBuiltinScriptForMetrics(ctx context.Context, clusterID, scriptName string, params map[string]string) (*common.QueryResult, error) {
-	// Try builtin scripts first
-	builtinScript, exists := BuiltinScripts[scriptName]
-	var renderedScript string
-	var scriptDescription, scriptCategory string
-	var err error
+	// Get script from script manager
+	script, err := e.scriptManager.GetScript(scriptName)
+	if err != nil {
+		return nil, fmt.Errorf("script '%s' not found", scriptName)
+	}
 
-	if exists {
-		// Use builtin script
-		e.logger.WithFields(logrus.Fields{
-			"script_name": scriptName,
-			"description": builtinScript.Description,
-			"category":    builtinScript.Category,
-			"parameters":  params,
-		}).Info("Executing builtin script for metrics collection")
+	e.logger.WithFields(logrus.Fields{
+		"script_name": scriptName,
+		"description": script.Short,
+		"category":    script.Category,
+		"is_builtin":  script.IsBuiltin,
+		"parameters":  params,
+	}).Info("Executing script for metrics collection")
 
-		renderedScript, err = builtinScript.Execute(params)
-		if err != nil {
-			return nil, fmt.Errorf("failed to render script: %w", err)
-		}
-
-		scriptDescription = builtinScript.Description
-		scriptCategory = builtinScript.Category
-	} else {
-		// Fall back to script from file system
-		script, err := e.scriptManager.GetScript(scriptName)
-		if err != nil {
-			return nil, fmt.Errorf("script '%s' not found", scriptName)
-		}
-
-		e.logger.WithFields(logrus.Fields{
-			"script_name": scriptName,
-			"description": script.Short,
-			"category":    script.Category,
-			"parameters":  params,
-		}).Info("Executing script for metrics collection")
-
-		renderedScript, err = e.scriptManager.ExecuteScript(scriptName, params)
-		if err != nil {
-			return nil, fmt.Errorf("failed to render script: %w", err)
-		}
-
-		scriptDescription = script.Short
-		scriptCategory = script.Category
+	// Render the script with parameters
+	renderedScript, err := e.scriptManager.ExecuteScript(scriptName, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render script: %w", err)
 	}
 
 	// Execute the script and capture results
@@ -246,8 +173,8 @@ func (e *Executor) ExecuteBuiltinScriptForMetrics(ctx context.Context, clusterID
 			result.Metadata = make(map[string]string)
 		}
 		result.Metadata["script_name"] = scriptName
-		result.Metadata["script_category"] = scriptCategory
-		result.Metadata["script_description"] = scriptDescription
+		result.Metadata["script_category"] = script.Category
+		result.Metadata["script_description"] = script.Short
 
 		// Convert raw data to metrics based on script type
 		result.Metrics = e.convertDataToMetrics(result, scriptName)
@@ -325,22 +252,8 @@ func (e *Executor) ExecuteAllMetricScripts(ctx context.Context, clusterID string
 		},
 	}
 
-	// Get all available scripts
+	// Get all available scripts from script manager
 	scriptList := e.scriptManager.ListScripts()
-
-	// Add builtin scripts that are not in file system
-	for name := range BuiltinScripts {
-		found := false
-		for _, scriptName := range scriptList {
-			if scriptName == name {
-				found = true
-				break
-			}
-		}
-		if !found {
-			scriptList = append(scriptList, name)
-		}
-	}
 
 	for _, scriptName := range scriptList {
 		// Skip scripts that require specific parameters

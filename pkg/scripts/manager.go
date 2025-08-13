@@ -26,6 +26,7 @@ type Script struct {
 	Parameters []ScriptParameter `yaml:"parameters"`
 	Content    string            `yaml:"-"`
 	Path       string            `yaml:"-"`
+	IsBuiltin  bool              `yaml:"-"`
 }
 
 // ScriptParameter 表示脚本参数
@@ -45,8 +46,52 @@ func NewScriptManager(scriptsDir string) *ScriptManager {
 	}
 }
 
-// LoadScripts 加载所有脚本
+// LoadScripts 加载所有脚本（包括内置脚本和文件系统脚本）
 func (sm *ScriptManager) LoadScripts() error {
+	// 首先加载内置脚本
+	sm.loadBuiltinScripts()
+
+	// 然后加载文件系统脚本（如果存在的话）
+	if err := sm.loadFileScripts(); err != nil {
+		// 如果文件系统脚本加载失败，只记录警告，不返回错误
+		fmt.Printf("Warning: failed to load file system scripts: %v\n", err)
+	}
+
+	return nil
+}
+
+// loadBuiltinScripts 加载内置脚本
+func (sm *ScriptManager) loadBuiltinScripts() {
+	for name, template := range BuiltinScripts {
+		script := &Script{
+			Name:      name,
+			Short:     template.Description,
+			Long:      template.Description,
+			Category:  template.Category,
+			Tags:      []string{},
+			Content:   template.Template,
+			Path:      "",
+			IsBuiltin: true,
+		}
+
+		// 转换参数格式
+		for _, param := range template.Parameters {
+			scriptParam := ScriptParameter{
+				Name:        param.Name,
+				Type:        param.Type,
+				Description: param.Description,
+				Default:     param.DefaultValue,
+				Required:    param.Required,
+			}
+			script.Parameters = append(script.Parameters, scriptParam)
+		}
+
+		sm.scripts[name] = script
+	}
+}
+
+// loadFileScripts 加载文件系统脚本
+func (sm *ScriptManager) loadFileScripts() error {
 	pxDir := filepath.Join(sm.scriptsDir, "px")
 
 	// 检查scripts/px目录是否存在
@@ -75,6 +120,7 @@ func (sm *ScriptManager) LoadScripts() error {
 			continue
 		}
 
+		// 文件系统脚本会覆盖同名的内置脚本
 		sm.scripts[scriptName] = script
 	}
 
@@ -97,6 +143,7 @@ func (sm *ScriptManager) loadScript(name, dir string) (*Script, error) {
 
 	script.Name = name
 	script.Path = dir
+	script.IsBuiltin = false
 
 	// 查找PxL文件（优先查找与目录同名的文件）
 	pxlFiles := []string{
@@ -139,6 +186,15 @@ func (sm *ScriptManager) ListScripts() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// GetAllScripts 获取所有脚本的详细信息
+func (sm *ScriptManager) GetAllScripts() map[string]*Script {
+	result := make(map[string]*Script)
+	for name, script := range sm.scripts {
+		result[name] = script
+	}
+	return result
 }
 
 // GetScriptsByCategory 按类别获取脚本
