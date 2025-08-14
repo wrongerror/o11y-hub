@@ -1,404 +1,215 @@
 package server
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
+	stdlog "log"
 	"net/http"
-	"strings"
+	"sort"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
+	promcollectors "github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 
-	"github.com/wrongerror/observo-connector/pkg/common"
-	"github.com/wrongerror/observo-connector/pkg/export"
-	"github.com/wrongerror/observo-connector/pkg/scripts"
-	"github.com/wrongerror/observo-connector/pkg/vizier"
+	"github.com/wrongerror/observo-connector/pkg/collector"
+	_ "github.com/wrongerror/observo-connector/pkg/collector/beyla"  // Register beyla collector
+	_ "github.com/wrongerror/observo-connector/pkg/collector/vizier" // Register vizier collector
 )
 
-// Server HTTP服务器
-type Server struct {
-	router           *mux.Router
-	logger           *logrus.Logger
-	vizierClient     *vizier.Client
-	scriptExecutor   *scripts.Executor
-	port             int
-	defaultClusterID string
-
-	// Prometheus metrics
-	registry        *prometheus.Registry
-	upMetric        prometheus.Gauge
-	buildInfoMetric *prometheus.GaugeVec
-	requestCounter  *prometheus.CounterVec
-	requestDuration *prometheus.HistogramVec
+// Handler implements the HTTP handler with collector-based metrics
+type Handler struct {
+	unfilteredHandler       http.Handler
+	exporterMetricsRegistry *prometheus.Registry
+	includeExporterMetrics  bool
+	maxRequests             int
+	logger                  *logrus.Logger
+	config                  collector.Config
 }
 
-// NewServer 创建新的HTTP服务器
-func NewServer(port int, vizierClient *vizier.Client, defaultClusterID string) *Server {
-	logger := logrus.New()
-	scriptExecutor := scripts.NewExecutor(vizierClient, logger)
+// NewHandler creates a new HTTP handler with collector support
+func NewHandler(includeExporterMetrics bool, maxRequests int, logger *logrus.Logger, config collector.Config, filters ...string) *Handler {
+	h := &Handler{
+		exporterMetricsRegistry: prometheus.NewRegistry(),
+		includeExporterMetrics:  includeExporterMetrics,
+		maxRequests:             maxRequests,
+		logger:                  logger,
+		config:                  config,
+	}
 
-	// Create Prometheus registry
-	registry := prometheus.NewRegistry()
+	// Register Go runtime and process metrics if enabled
+	if h.includeExporterMetrics {
+		h.exporterMetricsRegistry.MustRegister(
+			promcollectors.NewProcessCollector(promcollectors.ProcessCollectorOpts{}),
+			promcollectors.NewGoCollector(),
+		)
+	}
 
-	// Define metrics
-	upMetric := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "observo_connector_up",
-		Help: "Whether the connector is up",
-	})
+	// Create unfiltered handler
+	if innerHandler, err := h.innerHandler(filters...); err != nil {
+		panic(fmt.Sprintf("Couldn't create metrics handler: %s", err))
+	} else {
+		h.unfilteredHandler = innerHandler
+	}
 
-	buildInfoMetric := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "observo_connector_build_info",
-		Help: "Build information",
-	}, []string{"version"})
+	return h
+}
 
-	requestCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "observo_connector_requests_total",
-		Help: "Total number of HTTP requests",
-	}, []string{"method", "path", "status"})
+// ServeHTTP implements http.Handler
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	filters := r.URL.Query()["collect[]"]
+	h.logger.WithField("filters", filters).Debug("Collect query")
 
-	requestDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name: "observo_connector_request_duration_seconds",
-		Help: "HTTP request duration in seconds",
-	}, []string{"method", "path"})
+	if len(filters) == 0 {
+		// No filters, use the prepared unfiltered handler
+		h.unfilteredHandler.ServeHTTP(w, r)
+		return
+	}
 
-	// Register metrics
-	registry.MustRegister(upMetric, buildInfoMetric, requestCounter, requestDuration)
+	// To serve filtered metrics, we create a filtering handler on the fly
+	filteredHandler, err := h.innerHandler(filters...)
+	if err != nil {
+		h.logger.WithError(err).Warn("Couldn't create filtered metrics handler")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf("Couldn't create filtered metrics handler: %s", err)))
+		return
+	}
+	filteredHandler.ServeHTTP(w, r)
+}
 
-	// Set static metrics
-	upMetric.Set(1)
-	buildInfoMetric.WithLabelValues("dev").Set(1)
+// innerHandler creates the prometheus handler with collectors
+func (h *Handler) innerHandler(filters ...string) (http.Handler, error) {
+	observoCollector, err := collector.NewObservoCollector(h.logger, h.config)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't create observo collector: %s", err)
+	}
+
+	// Only log the creation of an unfiltered handler, which should happen
+	// only once upon startup
+	if len(filters) == 0 {
+		h.logger.Info("Enabled collectors")
+		collectors := []string{}
+		for name := range observoCollector.Collectors {
+			collectors = append(collectors, name)
+		}
+		sort.Strings(collectors)
+		for _, c := range collectors {
+			h.logger.WithField("collector", c).Info("Collector enabled")
+		}
+	}
+
+	r := prometheus.NewRegistry()
+
+	// Register version information
+	buildInfo := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: collector.Namespace,
+			Name:      "build_info",
+			Help:      "Build information",
+		},
+		[]string{"version"},
+	)
+	buildInfo.WithLabelValues("dev").Set(1)
+	r.MustRegister(buildInfo)
+
+	// Register the observo collector
+	if err := r.Register(observoCollector); err != nil {
+		return nil, fmt.Errorf("couldn't register observo collector: %s", err)
+	}
+
+	handler := promhttp.HandlerFor(
+		prometheus.Gatherers{h.exporterMetricsRegistry, r},
+		promhttp.HandlerOpts{
+			ErrorLog:            stdlog.New(&logrusAdapter{logger: h.logger}, "", 0),
+			ErrorHandling:       promhttp.ContinueOnError,
+			MaxRequestsInFlight: h.maxRequests,
+			Registry:            h.exporterMetricsRegistry,
+		},
+	)
+
+	if h.includeExporterMetrics {
+		// Note that we have to use h.exporterMetricsRegistry here to
+		// use the same promhttp metrics for all expositions
+		handler = promhttp.InstrumentMetricHandler(
+			h.exporterMetricsRegistry, handler,
+		)
+	}
+
+	return handler, nil
+}
+
+// Server represents the HTTP server
+type Server struct {
+	router  *mux.Router
+	logger  *logrus.Logger
+	port    int
+	handler *Handler
+}
+
+// NewServer creates a new HTTP server with collector-based architecture
+func NewServer(port int, config collector.Config, logger *logrus.Logger) *Server {
+	// Create the collector-based handler
+	handler := NewHandler(
+		true, // include exporter metrics
+		40,   // max requests
+		logger,
+		config,
+	)
 
 	s := &Server{
-		router:           mux.NewRouter(),
-		logger:           logger,
-		vizierClient:     vizierClient,
-		scriptExecutor:   scriptExecutor,
-		port:             port,
-		defaultClusterID: defaultClusterID,
-		registry:         registry,
-		upMetric:         upMetric,
-		buildInfoMetric:  buildInfoMetric,
-		requestCounter:   requestCounter,
-		requestDuration:  requestDuration,
+		router:  mux.NewRouter(),
+		logger:  logger,
+		port:    port,
+		handler: handler,
 	}
 
 	s.setupRoutes()
 	return s
 }
 
-// setupRoutes 设置路由
+// setupRoutes sets up the HTTP routes
 func (s *Server) setupRoutes() {
-	// Prometheus metrics endpoint - 使用标准的/metrics路径
-	s.router.Path("/metrics").Handler(promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{}))
+	// Standard Prometheus metrics endpoint
+	s.router.Path("/metrics").Handler(s.handler)
 
-	// API路由
-	api := s.router.PathPrefix("/api/v1").Subrouter()
+	// Health check endpoint
+	s.router.HandleFunc("/health", s.handleHealth).Methods("GET")
 
-	// 健康检查
-	api.HandleFunc("/health", s.handleHealth).Methods("GET")
+	// Landing page
+	s.router.HandleFunc("/", s.handleLandingPage).Methods("GET")
 
-	// 自定义metrics端点，支持脚本参数
-	api.HandleFunc("/metrics", s.handleMetrics).Methods("GET")
-
-	// 脚本执行接口
-	api.HandleFunc("/execute", s.handleExecuteScript).Methods("POST")
-	api.HandleFunc("/execute-data", s.handleExecuteScriptWithData).Methods("POST")
-	api.HandleFunc("/scripts", s.handleListScripts).Methods("GET")
-	api.HandleFunc("/scripts/{name}", s.handleGetScript).Methods("GET")
-
-	// 添加中间件
+	// Add logging middleware
 	s.router.Use(s.loggingMiddleware)
 }
 
-// QueryRequest 查询请求
-type QueryRequest struct {
-	Query     string               `json:"query"`
-	ClusterID string               `json:"cluster_id"`
-	Format    common.ExportFormat  `json:"format,omitempty"`
-	Options   common.ExportOptions `json:"options,omitempty"`
-}
-
-// QueryResponse 查询响应
-type QueryResponse struct {
-	Success   bool                `json:"success"`
-	Data      *common.QueryResult `json:"data,omitempty"`
-	Error     string              `json:"error,omitempty"`
-	Timestamp time.Time           `json:"timestamp"`
-}
-
-// handleQuery 处理POST查询请求
-func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
-	var req QueryRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeErrorResponse(w, http.StatusBadRequest, "Invalid JSON payload")
-		return
-	}
-
-	if req.Query == "" {
-		s.writeErrorResponse(w, http.StatusBadRequest, "Query is required")
-		return
-	}
-
-	if req.ClusterID == "" {
-		s.writeErrorResponse(w, http.StatusBadRequest, "Cluster ID is required")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-
-	result, err := s.executeQuery(ctx, req.Query, req.ClusterID)
-	if err != nil {
-		s.writeErrorResponse(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	// 如果指定了导出格式，直接返回格式化数据
-	if req.Format != "" {
-		s.handleExportResponse(w, result, req.Format, req.Options)
-		return
-	}
-
-	response := QueryResponse{
-		Success:   true,
-		Data:      result,
-		Timestamp: time.Now(),
-	}
-
-	s.writeJSONResponse(w, http.StatusOK, response)
-}
-
-// handleQueryGET 处理GET查询请求
-func (s *Server) handleQueryGET(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("query")
-	clusterID := r.URL.Query().Get("cluster_id")
-	format := r.URL.Query().Get("format")
-
-	if query == "" {
-		s.writeErrorResponse(w, http.StatusBadRequest, "Query parameter is required")
-		return
-	}
-
-	if clusterID == "" {
-		s.writeErrorResponse(w, http.StatusBadRequest, "Cluster ID parameter is required")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-
-	result, err := s.executeQuery(ctx, query, clusterID)
-	if err != nil {
-		s.writeErrorResponse(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	// 如果指定了导出格式，直接返回格式化数据
-	if format != "" {
-		exportFormat := common.ExportFormat(format)
-		s.handleExportResponse(w, result, exportFormat, common.ExportOptions{})
-		return
-	}
-
-	response := QueryResponse{
-		Success:   true,
-		Data:      result,
-		Timestamp: time.Now(),
-	}
-
-	s.writeJSONResponse(w, http.StatusOK, response)
-}
-
-// handleHealth 处理健康检查
+// handleHealth handles health check requests
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	defer cancel()
-
-	clusterID := r.URL.Query().Get("cluster_id")
-	if clusterID == "" {
-		clusterID = "default" // 使用默认cluster ID
-	}
-
-	err := s.vizierClient.HealthCheck(ctx, clusterID)
-	if err != nil {
-		response := map[string]interface{}{
-			"status":    "unhealthy",
-			"error":     err.Error(),
-			"timestamp": time.Now(),
-		}
-		s.writeJSONResponse(w, http.StatusServiceUnavailable, response)
-		return
-	}
-
-	response := map[string]interface{}{
-		"status":    "healthy",
-		"timestamp": time.Now(),
-	}
-	s.writeJSONResponse(w, http.StatusOK, response)
-}
-
-// handleMetrics 处理Prometheus metrics请求
-func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	// 解析查询参数
-	query := r.URL.Query()
-	script := query.Get("script")
-	clusterID := query.Get("cluster_id")
-	if clusterID == "" {
-		clusterID = s.defaultClusterID
-	}
-
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8; escaping=underscores")
-
-	// 首先写入基础指标
-	baseMetrics := `# HELP observo_connector_build_info Build information
-# TYPE observo_connector_build_info gauge
-observo_connector_build_info{version="dev"} 1
-# HELP observo_connector_up Whether the connector is up
-# TYPE observo_connector_up gauge
-observo_connector_up 1
-`
-	w.Write([]byte(baseMetrics))
-
-	// 如果指定了脚本，执行并返回脚本指标
-	if script != "" {
-		s.logger.WithFields(logrus.Fields{
-			"script":     script,
-			"cluster_id": clusterID,
-		}).Info("Executing script for metrics")
-
-		// 构建脚本参数
-		params := make(map[string]string)
-		for key, values := range query {
-			if key != "script" && key != "cluster_id" && len(values) > 0 {
-				params[key] = values[0]
-			}
-		}
-
-		// 执行脚本获取数据
-		result, err := s.scriptExecutor.ExecuteBuiltinScriptForMetrics(ctx, clusterID, script, params)
-		if err != nil {
-			s.logger.WithError(err).Error("Failed to execute script for metrics")
-			// 写入错误指标
-			errorMetric := fmt.Sprintf("# HELP observo_connector_script_errors_total Script execution errors\n# TYPE observo_connector_script_errors_total counter\nobservo_connector_script_errors_total{script=\"%s\"} 1\n", script)
-			w.Write([]byte(errorMetric))
-			return
-		}
-
-		// 转换结果为Prometheus格式
-		if result != nil && len(result.Metrics) > 0 {
-			// 使用现有的PrometheusExporter
-			exporter := &export.PrometheusExporter{}
-			metricsData, err := exporter.Export(result, common.ExportOptions{})
-			if err != nil {
-				s.logger.WithError(err).Error("Failed to convert metrics to Prometheus format")
-				return
-			}
-			w.Write(metricsData)
-		}
-	}
-}
-
-// getServerMetrics returns basic server health metrics
-func (s *Server) getServerMetrics() []common.Metric {
-	now := time.Now()
-	return []common.Metric{
-		{
-			Name:        "observo_connector_up",
-			Type:        common.MetricTypeGauge,
-			Description: "Whether the connector is up",
-			Value:       1,
-			Timestamp:   now,
-		},
-		{
-			Name:        "observo_connector_build_info",
-			Type:        common.MetricTypeGauge,
-			Description: "Build information",
-			Labels:      map[string]string{"version": "dev"},
-			Value:       1,
-			Timestamp:   now,
-		},
-	}
-}
-
-// executeQuery 执行查询
-func (s *Server) executeQuery(ctx context.Context, query, clusterID string) (*common.QueryResult, error) {
-	s.logger.WithFields(logrus.Fields{
-		"query":      query,
-		"cluster_id": clusterID,
-	}).Info("Executing query")
-
-	// Use the script executor for query execution
-	return s.scriptExecutor.ExecuteBuiltinScriptForMetrics(ctx, clusterID, "custom", map[string]string{
-		"query": query,
-	})
-}
-
-// handleExport 处理导出请求
-func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
-	var req QueryRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeErrorResponse(w, http.StatusBadRequest, "Invalid JSON payload")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-
-	result, err := s.executeQuery(ctx, req.Query, req.ClusterID)
-	if err != nil {
-		s.writeErrorResponse(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	format := req.Format
-	if format == "" {
-		format = common.FormatJSON
-	}
-
-	s.handleExportResponse(w, result, format, req.Options)
-}
-
-// handleExportResponse 处理导出响应 - 简化版本
-func (s *Server) handleExportResponse(w http.ResponseWriter, result *common.QueryResult, format common.ExportFormat, opts common.ExportOptions) {
-	// Simplified export - just return JSON for now
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":   true,
-		"data":      result,
-		"timestamp": time.Now(),
-	})
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"healthy","timestamp":"` + time.Now().Format(time.RFC3339) + `"}`))
 }
 
-// writeJSONResponse 写入JSON响应
-func (s *Server) writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(data)
+// handleLandingPage handles the landing page
+func (s *Server) handleLandingPage(w http.ResponseWriter, r *http.Request) {
+	landingPage := `<html>
+<head><title>Observo Connector</title></head>
+<body>
+<h1>Observo Connector</h1>
+<p><a href="/metrics">Metrics</a></p>
+<p><a href="/health">Health</a></p>
+</body>
+</html>`
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(landingPage))
 }
 
-// writeErrorResponse 写入错误响应
-func (s *Server) writeErrorResponse(w http.ResponseWriter, statusCode int, message string) {
-	response := map[string]interface{}{
-		"success":   false,
-		"error":     message,
-		"timestamp": time.Now(),
-	}
-	s.writeJSONResponse(w, statusCode, response)
-}
-
-// loggingMiddleware 日志中间件
+// loggingMiddleware provides request logging
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-
 		next.ServeHTTP(w, r)
-
 		s.logger.WithFields(logrus.Fields{
 			"method":   r.Method,
 			"path":     r.URL.Path,
@@ -408,175 +219,26 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// corsMiddleware CORS中间件
-func (s *Server) corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-// Start 启动服务器
+// Start starts the HTTP server
 func (s *Server) Start() error {
 	addr := fmt.Sprintf(":%d", s.port)
 	s.logger.WithField("address", addr).Info("Starting HTTP server")
 	return http.ListenAndServe(addr, s.router)
 }
 
-// StartTLS 启动TLS服务器
+// StartTLS starts the HTTPS server
 func (s *Server) StartTLS(certFile, keyFile string) error {
 	addr := fmt.Sprintf(":%d", s.port)
 	s.logger.WithField("address", addr).Info("Starting HTTPS server")
 	return http.ListenAndServeTLS(addr, certFile, keyFile, s.router)
 }
 
-// handleExecuteScript 处理脚本执行请求
-func (s *Server) handleExecuteScript(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Script    string            `json:"script"`
-		ClusterID string            `json:"cluster_id,omitempty"`
-		Params    map[string]string `json:"params,omitempty"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	clusterID := req.ClusterID
-	if clusterID == "" {
-		clusterID = s.defaultClusterID
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-
-	// Check if this is a script name (builtin or file-based) or raw PxL code
-	if s.isScriptName(req.Script) {
-		// Execute as a named script with parameters
-		err := s.scriptExecutor.ExecuteBuiltinScript(ctx, clusterID, req.Script, req.Params)
-		if err != nil {
-			s.logger.WithError(err).Error("Failed to execute script")
-			http.Error(w, fmt.Sprintf("Script execution failed: %v", err), http.StatusInternalServerError)
-			return
-		}
-	} else {
-		// Execute as raw PxL code
-		err := s.vizierClient.ExecuteScript(ctx, clusterID, req.Script)
-		if err != nil {
-			s.logger.WithError(err).Error("Failed to execute script")
-			http.Error(w, fmt.Sprintf("Script execution failed: %v", err), http.StatusInternalServerError)
-			return
-		}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "Script executed successfully",
-	})
+// logrusAdapter adapts logrus to stdlib log interface
+type logrusAdapter struct {
+	logger *logrus.Logger
 }
 
-// handleExecuteScriptWithData 处理脚本执行请求并返回解析后的数据
-func (s *Server) handleExecuteScriptWithData(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Script    string            `json:"script"`
-		ClusterID string            `json:"cluster_id,omitempty"`
-		Params    map[string]string `json:"params,omitempty"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	clusterID := req.ClusterID
-	if clusterID == "" {
-		clusterID = s.defaultClusterID
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-
-	// Check if this is a script name (builtin or file-based) or raw PxL code
-	var result *common.QueryResult
-	var err error
-
-	if s.isScriptName(req.Script) {
-		// Execute as a named script with parameters and get data
-		result, err = s.scriptExecutor.ExecuteBuiltinScriptForMetrics(ctx, clusterID, req.Script, req.Params)
-		if err != nil {
-			s.logger.WithError(err).Error("Failed to execute script for data")
-			http.Error(w, fmt.Sprintf("Script execution failed: %v", err), http.StatusInternalServerError)
-			return
-		}
-	} else {
-		// Execute as raw PxL code and get data
-		result, err = s.vizierClient.ExecuteScriptAndExtractData(ctx, clusterID, req.Script)
-		if err != nil {
-			s.logger.WithError(err).Error("Failed to execute script for data")
-			http.Error(w, fmt.Sprintf("Script execution failed: %v", err), http.StatusInternalServerError)
-			return
-		}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":     true,
-		"message":     "Script executed successfully",
-		"data":        result.Data,
-		"row_count":   len(result.Data),
-		"executed_at": result.ExecutedAt,
-		"duration":    result.Duration.String(),
-		"metadata":    result.Metadata,
-	})
-}
-
-// isScriptName checks if the provided string is a script name (not raw PxL code)
-func (s *Server) isScriptName(script string) bool {
-	// Simple heuristic: if it doesn't contain newlines or 'import', it's likely a script name
-	return !strings.Contains(script, "\n") && !strings.Contains(script, "import")
-}
-
-// handleListScripts 处理列出脚本请求 - 简化版本
-func (s *Server) handleListScripts(w http.ResponseWriter, r *http.Request) {
-	// Get script names from script manager via script executor
-	scriptInfos := s.scriptExecutor.ListBuiltinScripts()
-	scriptNames := make([]string, 0, len(scriptInfos))
-	for name := range scriptInfos {
-		scriptNames = append(scriptNames, name)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"scripts": scriptNames,
-	})
-}
-
-// handleGetScript 处理获取脚本详情请求 - 简化版本
-func (s *Server) handleGetScript(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	scriptName := vars["name"]
-
-	// Return basic script info
-	scriptInfo := map[string]interface{}{
-		"name":        scriptName,
-		"description": fmt.Sprintf("Built-in script: %s", scriptName),
-		"parameters":  []string{"start_time", "namespace"},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"script":  scriptInfo,
-	})
+func (l *logrusAdapter) Write(p []byte) (n int, err error) {
+	l.logger.Error(string(p))
+	return len(p), nil
 }
