@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/wrongerror/observo-connector/pkg/expire"
+	"github.com/wrongerror/observo-connector/pkg/metrics"
 )
 
 // HTTPMetrics manages Prometheus histogram metrics for HTTP requests
@@ -17,17 +18,20 @@ type HTTPMetrics struct {
 	cachedClock *expire.CachedClock
 	logger      *logrus.Logger
 
-	// Histogram metrics with expiring labels
-	clientRequestDuration  *ExpiringHistogram
-	clientRequestBodySize  *ExpiringHistogram
-	clientResponseBodySize *ExpiringHistogram
-	serverRequestDuration  *ExpiringHistogram
-	serverRequestBodySize  *ExpiringHistogram
-	serverResponseBodySize *ExpiringHistogram
+	// Histogram metrics with expiring labels using generic Expirer
+	clientRequestDuration  *metrics.Expirer[prometheus.Histogram]
+	clientRequestBodySize  *metrics.Expirer[prometheus.Histogram]
+	clientResponseBodySize *metrics.Expirer[prometheus.Histogram]
+	serverRequestDuration  *metrics.Expirer[prometheus.Histogram]
+	serverRequestBodySize  *metrics.Expirer[prometheus.Histogram]
+	serverResponseBodySize *metrics.Expirer[prometheus.Histogram]
 
-	// Last timestamp processed to handle duplicates
-	processedEvents   map[string]bool
+	// Event deduplication with TTL
+	processedEvents   map[string]time.Time // Store event ID -> last seen time
 	processedEventsMu sync.RWMutex
+	cleanupTicker     *time.Ticker
+	stopCleanup       chan struct{}
+	eventTTL          time.Duration
 }
 
 // HTTPMetricLabels represents the label set for HTTP metrics
@@ -66,74 +70,7 @@ func (l HTTPMetricLabels) ToSlice() []string {
 	}
 }
 
-// HistogramEntry represents a single histogram instance with its label values
-type HistogramEntry struct {
-	observer    prometheus.Observer
-	labelValues []string
-}
-
-// ExpiringHistogram wraps a Prometheus histogram with an expiry map for labels
-type ExpiringHistogram struct {
-	wrapped   *prometheus.HistogramVec
-	expiryMap *expire.ExpiryMap[*HistogramEntry]
-	logger    *logrus.Logger
-}
-
-// NewExpiringHistogram creates a new expiring histogram following beyla's pattern
-func NewExpiringHistogram(name, help string, labelNames []string, buckets []float64, clock expire.Clock, ttl time.Duration, logger *logrus.Logger) *ExpiringHistogram {
-	wrapped := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    name,
-		Help:    help,
-		Buckets: buckets,
-	}, labelNames)
-
-	return &ExpiringHistogram{
-		wrapped:   wrapped,
-		expiryMap: expire.NewExpiryMap[*HistogramEntry](clock, ttl),
-		logger:    logger,
-	}
-}
-
-// WithLabelValues returns the HistogramEntry for the given slice of label values.
-// If accessed for the first time, a new HistogramEntry is created and cached.
-func (h *ExpiringHistogram) WithLabelValues(lbls ...string) *HistogramEntry {
-	return h.expiryMap.GetOrCreate(lbls, func() *HistogramEntry {
-		h.logger.WithField("labelValues", lbls).Debug("Creating new histogram instance")
-		observer, err := h.wrapped.GetMetricWithLabelValues(lbls...)
-		if err != nil {
-			panic(err) // Same behavior as beyla
-		}
-		return &HistogramEntry{
-			observer:    observer,
-			labelValues: lbls,
-		}
-	})
-}
-
-// Observe records a value with the given labels
-func (h *ExpiringHistogram) Observe(value float64, labels HTTPMetricLabels) {
-	labelValues := labels.ToSlice()
-	entry := h.WithLabelValues(labelValues...)
-	entry.observer.Observe(value)
-}
-
-// Describe implements prometheus.Collector
-func (h *ExpiringHistogram) Describe(ch chan<- *prometheus.Desc) {
-	h.wrapped.Describe(ch)
-}
-
-// Collect implements prometheus.Collector following beyla's pattern
-func (h *ExpiringHistogram) Collect(ch chan<- prometheus.Metric) {
-	// Clean up expired entries
-	expired := h.expiryMap.DeleteExpired()
-	for _, old := range expired {
-		h.wrapped.DeleteLabelValues(old.labelValues...)
-		h.logger.WithField("labelValues", old.labelValues).Debug("Deleting expired histogram metric")
-	}
-
-	// Collect from the wrapped HistogramVec which will include all active metrics
-	h.wrapped.Collect(ch)
-} // NewHTTPMetrics creates a new HTTPMetrics instance
+// NewHTTPMetrics creates a new HTTPMetrics instance
 func NewHTTPMetrics(logger *logrus.Logger) *HTTPMetrics {
 	clock := expire.NewCachedClock(time.Now)
 	clockFunc := clock.ClockFunc()
@@ -149,43 +86,69 @@ func NewHTTPMetrics(logger *logrus.Logger) *HTTPMetrics {
 		"req_method", "req_path", "resp_status_code",
 	}
 
-	return &HTTPMetrics{
+	m := &HTTPMetrics{
 		cachedClock: clock,
 		logger:      logger,
 
-		clientRequestDuration: NewExpiringHistogram(
-			"http_client_request_duration_seconds",
-			"Duration of HTTP service calls from the client side, in seconds",
-			labelNames, durationBuckets, clockFunc, ttl, logger,
+		clientRequestDuration: metrics.NewExpirer[prometheus.Histogram](
+			prometheus.NewHistogramVec(prometheus.HistogramOpts{
+				Name:    "http_client_request_duration_seconds",
+				Help:    "Duration of HTTP service calls from the client side, in seconds",
+				Buckets: durationBuckets,
+			}, labelNames),
+			clockFunc, ttl,
 		),
-		clientRequestBodySize: NewExpiringHistogram(
-			"http_client_request_body_size_bytes",
-			"Size, in bytes, of the HTTP request body as sent from the client side",
-			labelNames, sizeBuckets, clockFunc, ttl, logger,
+		clientRequestBodySize: metrics.NewExpirer[prometheus.Histogram](
+			prometheus.NewHistogramVec(prometheus.HistogramOpts{
+				Name:    "http_client_request_body_size_bytes",
+				Help:    "Size, in bytes, of the HTTP request body as sent from the client side",
+				Buckets: sizeBuckets,
+			}, labelNames),
+			clockFunc, ttl,
 		),
-		clientResponseBodySize: NewExpiringHistogram(
-			"http_client_response_body_size_bytes",
-			"Size, in bytes, of the HTTP response body as received at the client side",
-			labelNames, sizeBuckets, clockFunc, ttl, logger,
+		clientResponseBodySize: metrics.NewExpirer[prometheus.Histogram](
+			prometheus.NewHistogramVec(prometheus.HistogramOpts{
+				Name:    "http_client_response_body_size_bytes",
+				Help:    "Size, in bytes, of the HTTP response body as received at the client side",
+				Buckets: sizeBuckets,
+			}, labelNames),
+			clockFunc, ttl,
 		),
-		serverRequestDuration: NewExpiringHistogram(
-			"http_server_request_duration_seconds",
-			"Duration of HTTP service calls from the server side, in seconds",
-			labelNames, durationBuckets, clockFunc, ttl, logger,
+		serverRequestDuration: metrics.NewExpirer[prometheus.Histogram](
+			prometheus.NewHistogramVec(prometheus.HistogramOpts{
+				Name:    "http_server_request_duration_seconds",
+				Help:    "Duration of HTTP service calls from the server side, in seconds",
+				Buckets: durationBuckets,
+			}, labelNames),
+			clockFunc, ttl,
 		),
-		serverRequestBodySize: NewExpiringHistogram(
-			"http_server_request_body_size_bytes",
-			"Size, in bytes, of the HTTP request body as received at the server side",
-			labelNames, sizeBuckets, clockFunc, ttl, logger,
+		serverRequestBodySize: metrics.NewExpirer[prometheus.Histogram](
+			prometheus.NewHistogramVec(prometheus.HistogramOpts{
+				Name:    "http_server_request_body_size_bytes",
+				Help:    "Size, in bytes, of the HTTP request body as received at the server side",
+				Buckets: sizeBuckets,
+			}, labelNames),
+			clockFunc, ttl,
 		),
-		serverResponseBodySize: NewExpiringHistogram(
-			"http_server_response_body_size_bytes",
-			"Size, in bytes, of the HTTP response body as sent from the server side",
-			labelNames, sizeBuckets, clockFunc, ttl, logger,
+		serverResponseBodySize: metrics.NewExpirer[prometheus.Histogram](
+			prometheus.NewHistogramVec(prometheus.HistogramOpts{
+				Name:    "http_server_response_body_size_bytes",
+				Help:    "Size, in bytes, of the HTTP response body as sent from the server side",
+				Buckets: sizeBuckets,
+			}, labelNames),
+			clockFunc, ttl,
 		),
 
-		processedEvents: make(map[string]bool),
+		processedEvents: make(map[string]time.Time), // TTL-based event deduplication
+		stopCleanup:     make(chan struct{}),
+		eventTTL:        ttl, // Use same TTL as metrics
 	}
+
+	// Start background cleanup goroutine
+	m.cleanupTicker = time.NewTicker(2 * time.Minute) // Clean every 2 minutes
+	go m.backgroundCleanup()
+
+	return m
 }
 
 // UpdateClock updates the cached clock used by all histograms
@@ -198,17 +161,20 @@ func (m *HTTPMetrics) ProcessHTTPEvent(event map[string]interface{}) error {
 	// Create unique event ID for deduplication
 	eventID := m.createEventID(event)
 
+	now := time.Now()
+
 	// Check if already processed
 	m.processedEventsMu.RLock()
-	if m.processedEvents[eventID] {
+	lastSeen, exists := m.processedEvents[eventID]
+	if exists && now.Sub(lastSeen) < m.eventTTL {
 		m.processedEventsMu.RUnlock()
-		return nil // Skip duplicate
+		return nil // Skip duplicate (within TTL)
 	}
 	m.processedEventsMu.RUnlock()
 
 	// Mark as processed
 	m.processedEventsMu.Lock()
-	m.processedEvents[eventID] = true
+	m.processedEvents[eventID] = now
 	m.processedEventsMu.Unlock()
 
 	// Extract trace role to determine client vs server perspective
@@ -254,23 +220,23 @@ func (m *HTTPMetrics) ProcessHTTPEvent(event map[string]interface{}) error {
 	switch traceRole {
 	case "client":
 		if duration > 0 {
-			m.clientRequestDuration.Observe(duration, labels)
+			m.clientRequestDuration.WithLabelValues(labels.ToSlice()...).Metric.Observe(duration)
 		}
 		if reqBodySize > 0 {
-			m.clientRequestBodySize.Observe(reqBodySize, labels)
+			m.clientRequestBodySize.WithLabelValues(labels.ToSlice()...).Metric.Observe(reqBodySize)
 		}
 		if respBodySize > 0 {
-			m.clientResponseBodySize.Observe(respBodySize, labels)
+			m.clientResponseBodySize.WithLabelValues(labels.ToSlice()...).Metric.Observe(respBodySize)
 		}
 	case "server":
 		if duration > 0 {
-			m.serverRequestDuration.Observe(duration, labels)
+			m.serverRequestDuration.WithLabelValues(labels.ToSlice()...).Metric.Observe(duration)
 		}
 		if reqBodySize > 0 {
-			m.serverRequestBodySize.Observe(reqBodySize, labels)
+			m.serverRequestBodySize.WithLabelValues(labels.ToSlice()...).Metric.Observe(reqBodySize)
 		}
 		if respBodySize > 0 {
-			m.serverResponseBodySize.Observe(respBodySize, labels)
+			m.serverResponseBodySize.WithLabelValues(labels.ToSlice()...).Metric.Observe(respBodySize)
 		}
 	}
 
@@ -327,28 +293,57 @@ func (m *HTTPMetrics) createLabels(traceRole, namespace, podName, service, reqMe
 	}
 }
 
-// CleanupOldEvents removes processed events older than a certain threshold
+// backgroundCleanup runs in background to periodically clean expired events
+func (m *HTTPMetrics) backgroundCleanup() {
+	for {
+		select {
+		case <-m.cleanupTicker.C:
+			m.processedEventsMu.Lock()
+			now := time.Now()
+			expiredCount := 0
+
+			// Remove expired entries
+			for eventID, lastSeen := range m.processedEvents {
+				if now.Sub(lastSeen) > m.eventTTL {
+					delete(m.processedEvents, eventID)
+					expiredCount++
+				}
+			}
+			m.processedEventsMu.Unlock()
+
+			if expiredCount > 0 {
+				m.logger.WithField("expired_count", expiredCount).Debug("Background cleanup removed expired events")
+			}
+		case <-m.stopCleanup:
+			m.cleanupTicker.Stop()
+			return
+		}
+	}
+}
+
+// Stop stops the background cleanup goroutine
+func (m *HTTPMetrics) Stop() {
+	close(m.stopCleanup)
+}
+
+// CleanupOldEvents removes expired events (called during metrics collection)
 func (m *HTTPMetrics) CleanupOldEvents() {
 	m.processedEventsMu.Lock()
 	defer m.processedEventsMu.Unlock()
 
-	// Simple cleanup: if we have too many entries, clear half
-	if len(m.processedEvents) > 10000 {
-		m.logger.WithField("count", len(m.processedEvents)).Debug("Cleaning up processed events cache")
+	now := time.Now()
+	expiredCount := 0
 
-		// Keep only recent half (simple approach)
-		newMap := make(map[string]bool, 5000)
-		count := 0
-		for k, v := range m.processedEvents {
-			if count >= 5000 {
-				break
-			}
-			newMap[k] = v
-			count++
+	// Clean expired events using TTL mechanism
+	for eventID, lastSeen := range m.processedEvents {
+		if now.Sub(lastSeen) > m.eventTTL {
+			delete(m.processedEvents, eventID)
+			expiredCount++
 		}
-		m.processedEvents = newMap
+	}
 
-		m.logger.WithField("new_count", len(m.processedEvents)).Debug("Processed events cache cleaned")
+	if expiredCount > 0 {
+		m.logger.WithField("expired_count", expiredCount).Debug("Metrics collection cleanup removed expired events")
 	}
 }
 
