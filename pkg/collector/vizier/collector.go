@@ -21,12 +21,14 @@ type Collector struct {
 	vizierClient   *vizier.Client
 	scriptExecutor *scripts.Executor
 
-	// Metric descriptors
-	httpRequestsTotal       *collector.TypedDesc
-	httpRequestDuration     *collector.TypedDesc
-	httpErrorRate           *collector.TypedDesc
-	serviceCPUUsage         *collector.TypedDesc
-	serviceMemoryUsage      *collector.TypedDesc
+	// HTTP metrics with expiring histograms
+	httpMetrics *HTTPMetrics
+
+	// Resource metric descriptors
+	serviceCPUUsage    *collector.TypedDesc
+	serviceMemoryUsage *collector.TypedDesc
+
+	// Network metric descriptors
 	networkBytesTotal       *collector.TypedDesc
 	networkConnectionsTotal *collector.TypedDesc
 }
@@ -70,25 +72,10 @@ func NewCollector(logger *logrus.Logger, config collector.Config) (collector.Col
 		vizierClient:   vizierClient,
 		scriptExecutor: scriptExecutor,
 
-		// Define metric descriptors
-		httpRequestsTotal: collector.NewTypedDesc(
-			"http_requests_total",
-			"Total number of HTTP requests",
-			prometheus.CounterValue,
-			[]string{"service", "method", "status_code"},
-		),
-		httpRequestDuration: collector.NewTypedDesc(
-			"http_request_duration_seconds",
-			"HTTP request duration in seconds",
-			prometheus.GaugeValue,
-			[]string{"service", "method", "quantile"},
-		),
-		httpErrorRate: collector.NewTypedDesc(
-			"http_error_rate",
-			"HTTP error rate (percentage)",
-			prometheus.GaugeValue,
-			[]string{"service"},
-		),
+		// Initialize HTTP metrics with histograms and TTL support
+		httpMetrics: NewHTTPMetrics(logger),
+
+		// Define resource metric descriptors
 		serviceCPUUsage: collector.NewTypedDesc(
 			"service_cpu_usage_nanoseconds_total",
 			"Service CPU usage in nanoseconds",
@@ -101,6 +88,8 @@ func NewCollector(logger *logrus.Logger, config collector.Config) (collector.Col
 			prometheus.GaugeValue,
 			[]string{"service", "namespace", "pod"},
 		),
+
+		// Define network metric descriptors
 		networkBytesTotal: collector.NewTypedDesc(
 			"network_bytes_total",
 			"Total network bytes transferred",
@@ -139,69 +128,75 @@ func (c *Collector) Update(ch chan<- prometheus.Metric) error {
 	return nil
 }
 
-// collectHTTPMetrics collects HTTP-related metrics
+// collectHTTPMetrics collects HTTP-related metrics from Vizier http_events table
 func (c *Collector) collectHTTPMetrics(ctx context.Context, ch chan<- prometheus.Metric) error {
-	// Execute service_performance script
-	params := map[string]string{
-		"start_time": "-5m",
-		"namespace":  "",
-	}
+	// Execute simplified PxL script to get all HTTP events data with ctx metadata
+	script := `import px
 
-	result, err := c.scriptExecutor.ExecuteBuiltinScriptForMetrics(ctx, c.config.VizierClusterID, "service_performance", params)
+# Get HTTP events from the last 30 seconds
+df = px.DataFrame(table='http_events', start_time='-30s')
+
+# Extract ctx metadata fields
+df.service = df.ctx['service']
+df.namespace = df.ctx['namespace'] 
+df.pod_name = df.ctx['pod_name']
+df.container_name = df.ctx['container_name']
+
+# Keep all other fields as-is, display all fields including ctx metadata
+px.display(df, 'http_events')
+`
+
+	result, err := c.vizierClient.ExecuteScriptAndExtractData(ctx, c.config.VizierClusterID, script)
 	if err != nil {
-		return fmt.Errorf("failed to execute service_performance script: %w", err)
+		return fmt.Errorf("failed to execute HTTP events script: %w", err)
 	}
 
 	if result == nil || len(result.Data) == 0 {
 		return collector.ErrNoData
 	}
 
-	// Convert data to metrics
-	for _, row := range result.Data {
-		service, ok := row["service"].(string)
-		if !ok {
-			continue
+	// Log HTTP events data with all fields
+	c.logger.Infof("Found %d HTTP events with full field data", len(result.Data))
+
+	// Process each HTTP event record with the new histogram-based metrics system
+	eventCount := 0
+	processedCount := 0
+
+	for i, row := range result.Data {
+		eventCount++
+
+		if i < 2 { // Only log first 2 records to avoid spam
+			c.logger.Infof("=== HTTP Event %d Full Data ===", i+1)
+			c.logger.Infof("Basic: trace_role=%v, method=%v, path=%v, status=%v",
+				row["trace_role"], row["req_method"], row["req_path"], row["resp_status"])
+			c.logger.Infof("Timing: time=%v, latency=%v", row["time_"], row["latency"])
+			c.logger.Infof("Network: remote=%v:%v, local=%v:%v",
+				row["remote_addr"], row["remote_port"], row["local_addr"], row["local_port"])
+			c.logger.Infof("Ctx metadata:")
+			c.logger.Infof("  service=%v", row["service"])
+			c.logger.Infof("  namespace=%v", row["namespace"])
+			c.logger.Infof("  pod_name=%v", row["pod_name"])
+			c.logger.Infof("  container_name=%v", row["container_name"])
+			c.logger.Infof("Body sizes: req=%v, resp=%v", row["req_body_size"], row["resp_body_size"])
+
+			// Log truncated body content to avoid excessive output
+			reqBody := truncateString(getStringValue(row, "req_body", ""), 200)
+			respBody := truncateString(getStringValue(row, "resp_body", ""), 200)
+			c.logger.Infof("Body content (truncated): req=%q, resp=%q", reqBody, respBody)
 		}
 
-		// HTTP request count
-		if count, ok := row["http_request_count"]; ok {
-			if countVal, err := parseFloat64(count); err == nil {
-				ch <- c.httpRequestsTotal.MustNewConstMetric(countVal, service, "GET", "200")
-			}
-		}
-
-		// HTTP request rate (RPS)
-		if rps, ok := row["http_rps"]; ok {
-			if rpsVal, err := parseFloat64(rps); err == nil {
-				ch <- prometheus.MustNewConstMetric(
-					prometheus.NewDesc(
-						prometheus.BuildFQName(collector.Namespace, "", "http_requests_per_second"),
-						"HTTP requests per second",
-						[]string{"service"},
-						nil,
-					),
-					prometheus.GaugeValue,
-					rpsVal,
-					service,
-				)
-			}
-		}
-
-		// HTTP average latency
-		if latency, ok := row["http_avg_latency_ms"]; ok {
-			if latencyVal, err := parseFloat64(latency); err == nil {
-				// Convert milliseconds to seconds
-				ch <- c.httpRequestDuration.MustNewConstMetric(latencyVal/1000.0, service, "GET", "0.5")
-			}
-		}
-
-		// HTTP error rate
-		if errorRate, ok := row["http_error_rate"]; ok {
-			if errorRateVal, err := parseFloat64(errorRate); err == nil {
-				ch <- c.httpErrorRate.MustNewConstMetric(errorRateVal*100, service)
-			}
+		// Process event with the new histogram metrics system
+		if err := c.httpMetrics.ProcessHTTPEvent(row); err != nil {
+			c.logger.WithError(err).Debug("Failed to process HTTP event")
+		} else {
+			processedCount++
 		}
 	}
+
+	c.logger.Infof("Processed %d/%d HTTP events successfully", processedCount, eventCount)
+
+	// Collect all histogram metrics
+	c.httpMetrics.Collect(ch)
 
 	return nil
 }
@@ -324,6 +319,13 @@ func getStringValue(row map[string]interface{}, key, defaultValue string) string
 		}
 	}
 	return defaultValue
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 func init() {
