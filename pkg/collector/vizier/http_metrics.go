@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/wrongerror/observo-connector/pkg/expire"
+	"github.com/wrongerror/observo-connector/pkg/k8s"
 	"github.com/wrongerror/observo-connector/pkg/metrics"
 )
 
@@ -17,6 +18,7 @@ import (
 type HTTPMetrics struct {
 	cachedClock *expire.CachedClock
 	logger      *logrus.Logger
+	k8sManager  *k8s.Manager
 
 	// Histogram metrics with expiring labels using generic Expirer
 	clientRequestDuration  *metrics.Expirer[prometheus.Histogram]
@@ -37,13 +39,19 @@ type HTTPMetrics struct {
 // HTTPMetricLabels represents the label set for HTTP metrics
 type HTTPMetricLabels struct {
 	ClientNamespace   string
+	ClientType        string
+	ClientAddress     string
 	ClientPodName     string
 	ClientServiceName string
+	ClientNodeName    string
 	ClientOwnerName   string
 	ClientOwnerType   string
 	ServerNamespace   string
+	ServerType        string
+	ServerAddress     string
 	ServerPodName     string
 	ServerServiceName string
+	ServerNodeName    string
 	ServerOwnerName   string
 	ServerOwnerType   string
 	ReqMethod         string
@@ -55,13 +63,19 @@ type HTTPMetricLabels struct {
 func (l HTTPMetricLabels) ToSlice() []string {
 	return []string{
 		l.ClientNamespace,
+		l.ClientType,
+		l.ClientAddress,
 		l.ClientPodName,
 		l.ClientServiceName,
+		l.ClientNodeName,
 		l.ClientOwnerName,
 		l.ClientOwnerType,
 		l.ServerNamespace,
+		l.ServerType,
+		l.ServerAddress,
 		l.ServerPodName,
 		l.ServerServiceName,
+		l.ServerNodeName,
 		l.ServerOwnerName,
 		l.ServerOwnerType,
 		l.ReqMethod,
@@ -81,14 +95,15 @@ func NewHTTPMetrics(logger *logrus.Logger) *HTTPMetrics {
 	sizeBuckets := []float64{64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216}
 
 	labelNames := []string{
-		"client_namespace", "client_pod_name", "client_service_name", "client_owner_name", "client_owner_type",
-		"server_namespace", "server_pod_name", "server_service_name", "server_owner_name", "server_owner_type",
+		"client_namespace", "client_type", "client_address", "client_pod_name", "client_service_name", "client_node_name", "client_owner_name", "client_owner_type",
+		"server_namespace", "server_type", "server_address", "server_pod_name", "server_service_name", "server_node_name", "server_owner_name", "server_owner_type",
 		"req_method", "req_path", "resp_status_code",
 	}
 
 	m := &HTTPMetrics{
 		cachedClock: clock,
 		logger:      logger,
+		k8sManager:  nil, // Will be set by SetK8sManager
 
 		clientRequestDuration: metrics.NewExpirer[prometheus.Histogram](
 			prometheus.NewHistogramVec(prometheus.HistogramOpts{
@@ -151,6 +166,11 @@ func NewHTTPMetrics(logger *logrus.Logger) *HTTPMetrics {
 	return m
 }
 
+// SetK8sManager sets the Kubernetes manager for endpoint resolution
+func (m *HTTPMetrics) SetK8sManager(k8sManager *k8s.Manager) {
+	m.k8sManager = k8sManager
+}
+
 // UpdateClock updates the cached clock used by all histograms
 func (m *HTTPMetrics) UpdateClock() {
 	m.cachedClock.Update()
@@ -208,15 +228,25 @@ func (m *HTTPMetrics) ProcessHTTPEvent(event map[string]interface{}) error {
 	reqBodySize, _ := parseFloat64(event["req_body_size"])
 	respBodySize, _ := parseFloat64(event["resp_body_size"])
 
-	// Extract metadata from ctx fields
+	// Extract metadata from ctx fields (local endpoint)
 	service := getStringValue(event, "service", "")
 	namespace := getStringValue(event, "namespace", "")
 	podName := getStringValue(event, "pod_name", "")
+	nodeName := getStringValue(event, "node_name", "")
 
-	// Create labels based on trace role
-	labels := m.createLabels(traceRole, namespace, podName, service, reqMethod, reqPath, respStatus)
+	// Extract remote/local addresses
+	remoteAddr := getStringValue(event, "remote_addr", "")
+	localAddr := getStringValue(event, "local_addr", "")
 
-	// Update metrics based on trace role
+	// Extract resolved remote endpoint information from Pixie's built-in functions
+	remotePodName := getStringValue(event, "remote_pod_name", "")
+	remoteServiceName := getStringValue(event, "remote_service_name", "")
+	remoteNamespace := getStringValue(event, "remote_namespace", "")
+	remoteNodeName := getStringValue(event, "remote_node_name", "")
+
+	// Create labels based on trace role with resolved remote endpoint info
+	labels := m.createLabels(traceRole, namespace, podName, service, nodeName, remoteAddr, localAddr,
+		remotePodName, remoteServiceName, remoteNamespace, remoteNodeName, reqMethod, reqPath, respStatus) // Update metrics based on trace role
 	switch traceRole {
 	case "client":
 		if duration > 0 {
@@ -256,44 +286,119 @@ func (m *HTTPMetrics) createEventID(event map[string]interface{}) string {
 }
 
 // createLabels creates HTTPMetricLabels based on trace role and extracted metadata
-func (m *HTTPMetrics) createLabels(traceRole, namespace, podName, service, reqMethod, reqPath, respStatus string) HTTPMetricLabels {
-	var clientNamespace, clientPod, clientService string
-	var serverNamespace, serverPod, serverService string
+func (m *HTTPMetrics) createLabels(traceRole, namespace, podName, service, nodeName, remoteAddr, localAddr,
+	remotePodName, remoteServiceName, remoteNamespace, remoteNodeName, reqMethod, reqPath, respStatus string) HTTPMetricLabels {
+
+	// Get local endpoint information
+	localOwnerName, localOwnerType := m.getOwnerInfo(namespace, podName)
+
+	// Get remote endpoint information using K8s manager if available
+	var remoteEndpointInfo *k8s.EndpointInfo
+	var remoteOwnerName, remoteOwnerType string
+
+	if m.k8sManager != nil && remoteAddr != "" {
+		remoteEndpointInfo = m.k8sManager.GetEndpointInfo(remoteAddr)
+		if remoteEndpointInfo != nil && remoteEndpointInfo.Type == k8s.EndpointTypePod {
+			remoteOwnerName, remoteOwnerType = m.k8sManager.GetPodOwnerInfo(remoteEndpointInfo.Namespace, remoteEndpointInfo.Name)
+		}
+	}
+
+	// Fill in missing remote info from Pixie data if K8s manager didn't provide it
+	if remoteEndpointInfo == nil {
+		remoteEndpointInfo = &k8s.EndpointInfo{
+			Name:        remotePodName,
+			Namespace:   remoteNamespace,
+			IP:          remoteAddr,
+			NodeName:    remoteNodeName,
+			ServiceName: remoteServiceName,
+		}
+
+		// Determine type based on available information
+		if remotePodName != "" {
+			remoteEndpointInfo.Type = k8s.EndpointTypePod
+		} else if remoteServiceName != "" {
+			remoteEndpointInfo.Type = k8s.EndpointTypeService
+		} else if remoteNodeName != "" {
+			remoteEndpointInfo.Type = k8s.EndpointTypeNode
+		} else if m.isExternalAddress(remoteAddr) {
+			remoteEndpointInfo.Type = k8s.EndpointTypeExternal
+		} else {
+			remoteEndpointInfo.Type = k8s.EndpointTypeUnknown
+		}
+	}
+
+	var labels HTTPMetricLabels
 
 	if traceRole == "client" {
-		clientNamespace = namespace
-		clientPod = podName
-		clientService = service
-		serverNamespace = "unknown"
-		serverPod = "unknown"
-		serverService = "unknown"
+		// Local endpoint is client
+		labels.ClientNamespace = namespace
+		labels.ClientType = "pod"
+		labels.ClientAddress = localAddr
+		labels.ClientPodName = podName
+		labels.ClientServiceName = service
+		labels.ClientNodeName = nodeName
+		labels.ClientOwnerName = localOwnerName
+		labels.ClientOwnerType = localOwnerType
+
+		// Remote endpoint is server
+		labels.ServerNamespace = remoteEndpointInfo.Namespace
+		labels.ServerType = string(remoteEndpointInfo.Type)
+		labels.ServerAddress = remoteEndpointInfo.IP
+		labels.ServerPodName = remoteEndpointInfo.Name
+		labels.ServerServiceName = remoteEndpointInfo.ServiceName
+		labels.ServerNodeName = remoteEndpointInfo.NodeName
+		labels.ServerOwnerName = remoteOwnerName
+		labels.ServerOwnerType = remoteOwnerType
 	} else {
-		clientNamespace = "unknown"
-		clientPod = "unknown"
-		clientService = "unknown"
-		serverNamespace = namespace
-		serverPod = podName
-		serverService = service
+		// Remote endpoint is client
+		labels.ClientNamespace = remoteEndpointInfo.Namespace
+		labels.ClientType = string(remoteEndpointInfo.Type)
+		labels.ClientAddress = remoteEndpointInfo.IP
+		labels.ClientPodName = remoteEndpointInfo.Name
+		labels.ClientServiceName = remoteEndpointInfo.ServiceName
+		labels.ClientNodeName = remoteEndpointInfo.NodeName
+		labels.ClientOwnerName = remoteOwnerName
+		labels.ClientOwnerType = remoteOwnerType
+
+		// Local endpoint is server
+		labels.ServerNamespace = namespace
+		labels.ServerType = "pod"
+		labels.ServerAddress = localAddr
+		labels.ServerPodName = podName
+		labels.ServerServiceName = service
+		labels.ServerNodeName = nodeName
+		labels.ServerOwnerName = localOwnerName
+		labels.ServerOwnerType = localOwnerType
 	}
 
-	return HTTPMetricLabels{
-		ClientNamespace:   clientNamespace,
-		ClientPodName:     clientPod,
-		ClientServiceName: clientService,
-		ClientOwnerName:   "", // Not available in exploration
-		ClientOwnerType:   "", // Not available in exploration
-		ServerNamespace:   serverNamespace,
-		ServerPodName:     serverPod,
-		ServerServiceName: serverService,
-		ServerOwnerName:   "", // Not available in exploration
-		ServerOwnerType:   "", // Not available in exploration
-		ReqMethod:         reqMethod,
-		ReqPath:           reqPath,
-		RespStatusCode:    respStatus,
-	}
+	// Set request/response information
+	labels.ReqMethod = reqMethod
+	labels.ReqPath = reqPath
+	labels.RespStatusCode = respStatus
+
+	return labels
 }
 
-// backgroundCleanup runs in background to periodically clean expired events
+// getOwnerInfo gets owner information for a pod
+func (m *HTTPMetrics) getOwnerInfo(namespace, podName string) (string, string) {
+	if m.k8sManager != nil && namespace != "" && podName != "" {
+		return m.k8sManager.GetPodOwnerInfo(namespace, podName)
+	}
+	return "", ""
+}
+
+// isExternalAddress checks if an address is external to the cluster
+func (m *HTTPMetrics) isExternalAddress(addr string) bool {
+	if addr == "" {
+		return false
+	}
+
+	// Simple heuristic: if it starts with common external prefixes
+	return !strings.HasPrefix(addr, "10.") &&
+		!strings.HasPrefix(addr, "172.") &&
+		!strings.HasPrefix(addr, "192.168.") &&
+		!strings.HasPrefix(addr, "127.")
+} // backgroundCleanup runs in background to periodically clean expired events
 func (m *HTTPMetrics) backgroundCleanup() {
 	for {
 		select {

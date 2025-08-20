@@ -56,6 +56,9 @@ type Config struct {
 	TLSKeyFile    string
 	TLSCAFile     string
 
+	// Kubernetes configuration
+	KubeconfigPath string
+
 	// Beyla configuration
 	BeylaAddress string
 	BeylaEnabled bool

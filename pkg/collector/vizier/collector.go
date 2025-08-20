@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/wrongerror/observo-connector/pkg/collector"
+	"github.com/wrongerror/observo-connector/pkg/k8s"
 	"github.com/wrongerror/observo-connector/pkg/scripts"
 	"github.com/wrongerror/observo-connector/pkg/vizier"
 )
@@ -20,6 +21,7 @@ type Collector struct {
 	config         collector.Config
 	vizierClient   *vizier.Client
 	scriptExecutor *scripts.Executor
+	k8sManager     *k8s.Manager
 
 	// HTTP metrics with expiring histograms
 	httpMetrics *HTTPMetrics
@@ -66,11 +68,19 @@ func NewCollector(logger *logrus.Logger, config collector.Config) (collector.Col
 	// Create script executor
 	scriptExecutor := scripts.NewExecutor(vizierClient, logger)
 
-	return &Collector{
+	// Create K8s manager
+	k8sManager, err := k8s.NewManager(logger, config.KubeconfigPath)
+	if err != nil {
+		logger.WithError(err).Warn("Failed to create Kubernetes manager, continuing without K8s metadata")
+		k8sManager = nil
+	}
+
+	collector := &Collector{
 		logger:         logger,
 		config:         config,
 		vizierClient:   vizierClient,
 		scriptExecutor: scriptExecutor,
+		k8sManager:     k8sManager,
 
 		// Initialize HTTP metrics with histograms and TTL support
 		httpMetrics: NewHTTPMetrics(logger),
@@ -102,7 +112,21 @@ func NewCollector(logger *logrus.Logger, config collector.Config) (collector.Col
 			prometheus.CounterValue,
 			[]string{"service", "state", "protocol"},
 		),
-	}, nil
+	}
+
+	// Start K8s manager if available
+	if collector.k8sManager != nil {
+		// Set K8s manager for HTTP metrics
+		collector.httpMetrics.SetK8sManager(collector.k8sManager)
+
+		go func() {
+			if err := collector.k8sManager.Start(context.Background()); err != nil {
+				logger.WithError(err).Error("Failed to start Kubernetes manager")
+			}
+		}()
+	}
+
+	return collector, nil
 }
 
 // Update implements collector.Collector interface
@@ -130,19 +154,28 @@ func (c *Collector) Update(ch chan<- prometheus.Metric) error {
 
 // collectHTTPMetrics collects HTTP-related metrics from Vizier http_events table
 func (c *Collector) collectHTTPMetrics(ctx context.Context, ch chan<- prometheus.Metric) error {
-	// Execute simplified PxL script to get all HTTP events data with ctx metadata
+	// Execute enhanced PxL script to get HTTP events with remote endpoint resolution
 	script := `import px
 
 # Get HTTP events from the last 30 seconds
 df = px.DataFrame(table='http_events', start_time='-30s')
 
-# Extract ctx metadata fields
+# Extract ctx metadata fields for local endpoint
 df.service = df.ctx['service']
 df.namespace = df.ctx['namespace'] 
 df.pod_name = df.ctx['pod_name']
 df.container_name = df.ctx['container_name']
+df.node_name = df.ctx['node_name']
 
-# Keep all other fields as-is, display all fields including ctx metadata
+# Resolve remote endpoint information using Pixie's built-in functions
+# Based on trace_role, remote_addr represents either client or server
+df.remote_pod_id = px.ip_to_pod_id(df.remote_addr)
+df.remote_pod_name = px.pod_id_to_pod_name(df.remote_pod_id)
+df.remote_service_name = px.pod_id_to_service_name(df.remote_pod_id)
+df.remote_namespace = px.pod_id_to_namespace(df.remote_pod_id)
+df.remote_node_name = px.pod_id_to_node_name(df.remote_pod_id)
+
+# Keep all other fields as-is, display all fields including resolved remote endpoint info
 px.display(df, 'http_events')
 `
 
