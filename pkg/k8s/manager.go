@@ -69,9 +69,15 @@ func NewManager(logger *logrus.Logger, kubeconfig string) (*Manager, error) {
 	var err error
 
 	if kubeconfig != "" {
+		// Use specified kubeconfig
 		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
 	} else {
-		config, err = rest.InClusterConfig()
+		// Try default kubeconfig first, then in-cluster config
+		config, err = clientcmd.BuildConfigFromFlags("", clientcmd.RecommendedHomeFile)
+		if err != nil {
+			// Fall back to in-cluster config
+			config, err = rest.InClusterConfig()
+		}
 	}
 
 	if err != nil {
@@ -281,9 +287,11 @@ func (m *Manager) GetPodOwnerInfo(namespace, podName string) (string, string) {
 	m.mutex.RUnlock()
 
 	if !exists {
+		logrus.Debugf("Pod %s not found in cache. Available pods: %d", key, len(m.podsByName))
 		return "", ""
 	}
 
+	logrus.Debugf("Found pod %s: owner=%s, type=%s", key, info.OwnerName, info.OwnerType)
 	return info.OwnerName, info.OwnerType
 }
 
@@ -340,11 +348,14 @@ func (m *Manager) updatePodCache(pod *corev1.Pod) {
 	// Update name cache
 	key := pod.Namespace + "/" + pod.Name
 	m.podsByName[key] = info
+
+	logrus.Debugf("Cached pod %s with owner: %s (type: %s)", key, ownerName, ownerType)
 }
 
 // getPodOwner gets the owner information for a pod
 func (m *Manager) getPodOwner(pod *corev1.Pod) (string, string) {
 	if len(pod.OwnerReferences) == 0 {
+		logrus.Debugf("Pod %s/%s has no owner references", pod.Namespace, pod.Name)
 		return "", ""
 	}
 
@@ -353,9 +364,12 @@ func (m *Manager) getPodOwner(pod *corev1.Pod) (string, string) {
 	ownerName := owner.Name
 	ownerType := owner.Kind
 
+	logrus.Debugf("Pod %s/%s direct owner: %s (type: %s)", pod.Namespace, pod.Name, ownerName, ownerType)
+
 	// If owner is a ReplicaSet, try to find the Deployment
 	if owner.Kind == "ReplicaSet" {
 		if deployment := m.getReplicaSetOwner(pod.Namespace, owner.Name); deployment != "" {
+			logrus.Debugf("Found deployment %s for ReplicaSet %s", deployment, owner.Name)
 			return deployment, "Deployment"
 		}
 	}

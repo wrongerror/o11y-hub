@@ -231,18 +231,52 @@ func (m *HTTPMetrics) ProcessHTTPEvent(event map[string]interface{}) error {
 	// Extract metadata from ctx fields (local endpoint)
 	service := getStringValue(event, "service", "")
 	namespace := getStringValue(event, "namespace", "")
-	podName := getStringValue(event, "pod_name", "")
+	podNameRaw := getStringValue(event, "pod_name", "")
 	nodeName := getStringValue(event, "node_name", "")
+
+	// Parse pod name which comes as "namespace/pod-name" format from Pixie
+	var podName string
+	if podNameRaw != "" && strings.Contains(podNameRaw, "/") {
+		parts := strings.SplitN(podNameRaw, "/", 2)
+		if len(parts) == 2 {
+			// Use namespace from pod_name if local namespace is empty
+			if namespace == "" {
+				namespace = parts[0]
+			}
+			podName = parts[1]
+		} else {
+			podName = podNameRaw
+		}
+	} else {
+		podName = podNameRaw
+	}
 
 	// Extract remote/local addresses
 	remoteAddr := getStringValue(event, "remote_addr", "")
 	localAddr := getStringValue(event, "local_addr", "")
 
 	// Extract resolved remote endpoint information from Pixie's built-in functions
-	remotePodName := getStringValue(event, "remote_pod_name", "")
+	remotePodNameRaw := getStringValue(event, "remote_pod_name", "")
 	remoteServiceName := getStringValue(event, "remote_service_name", "")
 	remoteNamespace := getStringValue(event, "remote_namespace", "")
 	remoteNodeName := getStringValue(event, "remote_node_name", "")
+
+	// Parse remote pod name which also comes as "namespace/pod-name" format
+	var remotePodName string
+	if remotePodNameRaw != "" && strings.Contains(remotePodNameRaw, "/") {
+		parts := strings.SplitN(remotePodNameRaw, "/", 2)
+		if len(parts) == 2 {
+			// Use namespace from remote_pod_name if remote namespace is empty
+			if remoteNamespace == "" {
+				remoteNamespace = parts[0]
+			}
+			remotePodName = parts[1]
+		} else {
+			remotePodName = remotePodNameRaw
+		}
+	} else {
+		remotePodName = remotePodNameRaw
+	}
 
 	// Create labels based on trace role with resolved remote endpoint info
 	labels := m.createLabels(traceRole, namespace, podName, service, nodeName, remoteAddr, localAddr,
@@ -382,8 +416,11 @@ func (m *HTTPMetrics) createLabels(traceRole, namespace, podName, service, nodeN
 // getOwnerInfo gets owner information for a pod
 func (m *HTTPMetrics) getOwnerInfo(namespace, podName string) (string, string) {
 	if m.k8sManager != nil && namespace != "" && podName != "" {
-		return m.k8sManager.GetPodOwnerInfo(namespace, podName)
+		ownerName, ownerType := m.k8sManager.GetPodOwnerInfo(namespace, podName)
+		logrus.Debugf("Getting owner info for pod %s/%s: owner=%s, type=%s", namespace, podName, ownerName, ownerType)
+		return ownerName, ownerType
 	}
+	logrus.Debugf("No owner info available for pod %s/%s (k8sManager=%v)", namespace, podName, m.k8sManager != nil)
 	return "", ""
 }
 

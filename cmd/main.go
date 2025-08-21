@@ -36,6 +36,9 @@ var (
 	beylaEnabled = flag.Bool("beyla-enabled", false, "Enable Beyla collector")
 	beylaAddress = flag.String("beyla-address", "http://localhost:8999", "Beyla metrics endpoint")
 
+	// Kubernetes configuration
+	kubeconfigPath = flag.String("kubeconfig", "", "Path to kubeconfig file (defaults to ~/.kube/config if empty)")
+
 	// Collector configuration
 	enabledCollectors = flag.String("collectors", "vizier", "Comma-separated list of enabled collectors")
 	scrapeTimeout     = flag.Duration("scrape-timeout", 30*time.Second, "Scrape timeout")
@@ -92,6 +95,9 @@ func main() {
 		TLSCertFile:   *tlsCertFile,
 		TLSKeyFile:    *tlsKeyFile,
 		TLSCAFile:     *tlsCAFile,
+
+		// Kubernetes configuration
+		KubeconfigPath: *kubeconfigPath,
 
 		// Beyla configuration
 		BeylaEnabled: *beylaEnabled,
