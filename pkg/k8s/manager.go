@@ -3,7 +3,6 @@ package k8s
 import (
 	"context"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
@@ -473,29 +472,4 @@ func (m *Manager) updateNodeCache(node *corev1.Node) {
 			m.nodesByIP[addr.Address] = info
 		}
 	}
-}
-
-// isExternalIP checks if an IP is external (not in cluster networks)
-func (m *Manager) isExternalIP(ip string) bool {
-	parsedIP := net.ParseIP(ip)
-	if parsedIP == nil {
-		return false
-	}
-
-	// Check for private IP ranges
-	privateRanges := []string{
-		"10.0.0.0/8",
-		"172.16.0.0/12",
-		"192.168.0.0/16",
-	}
-
-	for _, cidr := range privateRanges {
-		_, network, _ := net.ParseCIDR(cidr)
-		if network.Contains(parsedIP) {
-			return false
-		}
-	}
-
-	// If not in private ranges, consider it external
-	return !parsedIP.IsLoopback() && !parsedIP.IsLinkLocalUnicast()
 }

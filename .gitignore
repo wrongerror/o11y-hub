@@ -75,6 +75,9 @@ quick_test_*.sh
 *_test_*.sh
 test_*.md
 *_test.md
+*_curl.md
+demo*.sh
+*demo*.sh
 
 # Development backup files
 *_clean.*

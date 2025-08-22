@@ -496,18 +496,7 @@ func (m *HTTPMetrics) getOwnerInfo(namespace, podName string) (string, string) {
 	return "", ""
 }
 
-// isExternalAddress checks if an address is external to the cluster
-func (m *HTTPMetrics) isExternalAddress(addr string) bool {
-	if addr == "" {
-		return false
-	}
-
-	// Simple heuristic: if it starts with common external prefixes
-	return !strings.HasPrefix(addr, "10.") &&
-		!strings.HasPrefix(addr, "172.") &&
-		!strings.HasPrefix(addr, "192.168.") &&
-		!strings.HasPrefix(addr, "127.")
-} // backgroundCleanup runs in background to periodically clean expired events
+// backgroundCleanup runs in background to periodically clean expired events
 func (m *HTTPMetrics) backgroundCleanup() {
 	for {
 		select {
