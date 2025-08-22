@@ -23,11 +23,10 @@ import (
 type EndpointType string
 
 const (
-	EndpointTypePod      EndpointType = "pod"
-	EndpointTypeService  EndpointType = "service"
-	EndpointTypeNode     EndpointType = "node"
-	EndpointTypeExternal EndpointType = "external"
-	EndpointTypeUnknown  EndpointType = "unknown"
+	EndpointTypePod     EndpointType = "pod"
+	EndpointTypeService EndpointType = "service"
+	EndpointTypeNode    EndpointType = "node"
+	EndpointTypeIP      EndpointType = "ip"
 )
 
 // EndpointInfo contains information about a network endpoint
@@ -264,16 +263,9 @@ func (m *Manager) GetEndpointInfo(ip string) *EndpointInfo {
 		return info
 	}
 
-	// Check if it's an external IP
-	if m.isExternalIP(ip) {
-		return &EndpointInfo{
-			Type: EndpointTypeExternal,
-			IP:   ip,
-		}
-	}
-
+	// Check if it's an external IP or any other IP
 	return &EndpointInfo{
-		Type: EndpointTypeUnknown,
+		Type: EndpointTypeIP,
 		IP:   ip,
 	}
 }

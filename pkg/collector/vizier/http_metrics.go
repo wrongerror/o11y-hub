@@ -57,6 +57,8 @@ type HTTPMetricLabels struct {
 	ReqMethod         string
 	ReqPath           string
 	RespStatusCode    string
+	TraceRole         string
+	Encrypted         string
 }
 
 // ToSlice converts HTTPMetricLabels to a string slice for use with expiry map
@@ -81,6 +83,8 @@ func (l HTTPMetricLabels) ToSlice() []string {
 		l.ReqMethod,
 		l.ReqPath,
 		l.RespStatusCode,
+		l.TraceRole,
+		l.Encrypted,
 	}
 }
 
@@ -97,7 +101,7 @@ func NewHTTPMetrics(logger *logrus.Logger) *HTTPMetrics {
 	labelNames := []string{
 		"client_namespace", "client_type", "client_address", "client_pod_name", "client_service_name", "client_node_name", "client_owner_name", "client_owner_type",
 		"server_namespace", "server_type", "server_address", "server_pod_name", "server_service_name", "server_node_name", "server_owner_name", "server_owner_type",
-		"req_method", "req_path", "resp_status_code",
+		"req_method", "req_path", "resp_status_code", "trace_role", "encrypted",
 	}
 
 	m := &HTTPMetrics{
@@ -228,6 +232,12 @@ func (m *HTTPMetrics) ProcessHTTPEvent(event map[string]interface{}) error {
 	reqBodySize, _ := parseFloat64(event["req_body_size"])
 	respBodySize, _ := parseFloat64(event["resp_body_size"])
 
+	// Extract SSL information from Pixie's encrypted field
+	encrypted := "false"
+	if encryptedVal, ok := event["encrypted"].(bool); ok && encryptedVal {
+		encrypted = "true"
+	}
+
 	// Extract metadata from ctx fields (local endpoint)
 	service := getStringValue(event, "service", "")
 	namespace := getStringValue(event, "namespace", "")
@@ -280,7 +290,7 @@ func (m *HTTPMetrics) ProcessHTTPEvent(event map[string]interface{}) error {
 
 	// Create labels based on trace role with resolved remote endpoint info
 	labels := m.createLabels(traceRole, namespace, podName, service, nodeName, remoteAddr, localAddr,
-		remotePodName, remoteServiceName, remoteNamespace, remoteNodeName, reqMethod, reqPath, respStatus) // Update metrics based on trace role
+		remotePodName, remoteServiceName, remoteNamespace, remoteNodeName, encrypted, reqMethod, reqPath, respStatus) // Update metrics based on trace role
 	switch traceRole {
 	case "client":
 		if duration > 0 {
@@ -319,9 +329,79 @@ func (m *HTTPMetrics) createEventID(event map[string]interface{}) string {
 	return fmt.Sprintf("%s:%s:%s:%s:%s", timeVal, traceRole, upid, respStatus, latency)
 }
 
+// determineEndpointType determines the correct endpoint type based on address and metadata
+func (m *HTTPMetrics) determineEndpointType(addr, podName, serviceName, nodeName string) k8s.EndpointType {
+	// For special IPs (loopback, link-local, etc.), use Pixie metadata to determine type
+	if m.isSpecialIP(addr) {
+		return m.determineTypeFromPixieData(podName, serviceName, nodeName)
+	}
+
+	// Use K8s manager to classify the IP if available
+	var ipClassification k8s.EndpointType
+	if m.k8sManager != nil {
+		endpointInfo := m.k8sManager.GetEndpointInfo(addr)
+		if endpointInfo != nil {
+			ipClassification = endpointInfo.Type
+		} else {
+			ipClassification = k8s.EndpointTypeIP
+		}
+	} else {
+		ipClassification = k8s.EndpointTypeIP
+	}
+
+	// Apply the correct logic based on requirements:
+	// 1. If address is Service IP → service
+	// 2. If address is Pod IP → pod
+	// 3. If address is Node IP:
+	//    - Has Pod info → pod (hostNetwork Pod)
+	//    - No Pod info → node (direct Node access)
+	// 4. Other cases → ip
+
+	switch ipClassification {
+	case k8s.EndpointTypeService:
+		return k8s.EndpointTypeService
+	case k8s.EndpointTypePod:
+		return k8s.EndpointTypePod
+	case k8s.EndpointTypeNode:
+		if podName != "" {
+			return k8s.EndpointTypePod // hostNetwork Pod
+		}
+		return k8s.EndpointTypeNode // direct Node access
+	default:
+		// Use Pixie metadata for unknown IPs
+		return m.determineTypeFromPixieData(podName, serviceName, nodeName)
+	}
+}
+
+// isSpecialIP checks if an IP is special (loopback, link-local, etc.)
+func (m *HTTPMetrics) isSpecialIP(addr string) bool {
+	if addr == "127.0.0.1" || addr == "::1" {
+		return true // loopback
+	}
+	if strings.HasPrefix(addr, "169.254.") {
+		return true // link-local (including Calico CNI)
+	}
+	return false
+}
+
+// determineTypeFromPixieData determines type based only on Pixie metadata
+func (m *HTTPMetrics) determineTypeFromPixieData(podName, serviceName, nodeName string) k8s.EndpointType {
+	// Priority: Service > Pod > Node > IP
+	if serviceName != "" {
+		return k8s.EndpointTypeService
+	}
+	if podName != "" {
+		return k8s.EndpointTypePod
+	}
+	if nodeName != "" {
+		return k8s.EndpointTypeNode
+	}
+	return k8s.EndpointTypeIP
+}
+
 // createLabels creates HTTPMetricLabels based on trace role and extracted metadata
 func (m *HTTPMetrics) createLabels(traceRole, namespace, podName, service, nodeName, remoteAddr, localAddr,
-	remotePodName, remoteServiceName, remoteNamespace, remoteNodeName, reqMethod, reqPath, respStatus string) HTTPMetricLabels {
+	remotePodName, remoteServiceName, remoteNamespace, remoteNodeName, encrypted, reqMethod, reqPath, respStatus string) HTTPMetricLabels {
 
 	// Get local endpoint information
 	localOwnerName, localOwnerType := m.getOwnerInfo(namespace, podName)
@@ -347,18 +427,8 @@ func (m *HTTPMetrics) createLabels(traceRole, namespace, podName, service, nodeN
 			ServiceName: remoteServiceName,
 		}
 
-		// Determine type based on available information
-		if remotePodName != "" {
-			remoteEndpointInfo.Type = k8s.EndpointTypePod
-		} else if remoteServiceName != "" {
-			remoteEndpointInfo.Type = k8s.EndpointTypeService
-		} else if remoteNodeName != "" {
-			remoteEndpointInfo.Type = k8s.EndpointTypeNode
-		} else if m.isExternalAddress(remoteAddr) {
-			remoteEndpointInfo.Type = k8s.EndpointTypeExternal
-		} else {
-			remoteEndpointInfo.Type = k8s.EndpointTypeUnknown
-		}
+		// Determine remote endpoint type using the improved logic
+		remoteEndpointInfo.Type = m.determineEndpointType(remoteAddr, remotePodName, remoteServiceName, remoteNodeName)
 	}
 
 	var labels HTTPMetricLabels
@@ -366,7 +436,7 @@ func (m *HTTPMetrics) createLabels(traceRole, namespace, podName, service, nodeN
 	if traceRole == "client" {
 		// Local endpoint is client
 		labels.ClientNamespace = namespace
-		labels.ClientType = "pod"
+		labels.ClientType = string(m.determineEndpointType(localAddr, podName, service, nodeName))
 		labels.ClientAddress = localAddr
 		labels.ClientPodName = podName
 		labels.ClientServiceName = service
@@ -396,7 +466,7 @@ func (m *HTTPMetrics) createLabels(traceRole, namespace, podName, service, nodeN
 
 		// Local endpoint is server
 		labels.ServerNamespace = namespace
-		labels.ServerType = "pod"
+		labels.ServerType = string(m.determineEndpointType(localAddr, podName, service, nodeName))
 		labels.ServerAddress = localAddr
 		labels.ServerPodName = podName
 		labels.ServerServiceName = service
@@ -406,6 +476,8 @@ func (m *HTTPMetrics) createLabels(traceRole, namespace, podName, service, nodeN
 	}
 
 	// Set request/response information
+	labels.TraceRole = traceRole
+	labels.Encrypted = encrypted
 	labels.ReqMethod = reqMethod
 	labels.ReqPath = reqPath
 	labels.RespStatusCode = respStatus
