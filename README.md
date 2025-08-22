@@ -30,7 +30,7 @@
 ## 项目结构
 
 ```
-observo-connector/
+o11y-hub/
 ├── cmd/
 │   └── main.go              # 主程序入口，支持多种命令
 ├── pkg/
@@ -69,8 +69,8 @@ observo-connector/
 
 ```bash
 # 克隆项目
-git clone https://github.com/wrongerror/observo-connector.git
-cd observo-connector
+git clone https://github.com/wrongerror/o11y-hub.git
+cd o11y-hub
 
 # 安装依赖并构建
 make build
@@ -82,13 +82,13 @@ make build
 
 ```bash
 # 健康检查
-./observo-connector health \
+./o11y-hub health \
   --cluster-id=my-cluster \
   --address=localhost:50051 \
   --skip-verify=true
 
 # 执行查询
-./observo-connector query "dx.display_name" \
+./o11y-hub query "dx.display_name" \
   --cluster-id=my-cluster \
   --address=localhost:50051 \
   --skip-verify=true
@@ -98,7 +98,7 @@ make build
 
 ```bash
 # 启动HTTP API服务器
-./observo-connector server \
+./o11y-hub server \
   --port=8080 \
   --cluster-id=my-cluster \
   --address=localhost:50051 \
@@ -117,17 +117,17 @@ Observo Connector 包含多个预定义的监控脚本，可以自动从Pixie收
 
 ```bash
 # 列出所有内置脚本
-./observo-connector --list-scripts
+./o11y-hub --list-scripts
 
 # 查看特定脚本帮助
-./observo-connector --script-help resource_usage
+./o11y-hub --script-help resource_usage
 ```
 
 #### 执行内置脚本
 
 ```bash
 # 执行资源使用情况脚本
-./observo-connector --builtin-script resource_usage \
+./o11y-hub --builtin-script resource_usage \
   --script-params "start_time=-5m" \
   --address vizier-query-broker-svc.pl.svc.cluster.local:50300 \
   --cluster-id demo-cluster \
@@ -137,7 +137,7 @@ Observo Connector 包含多个预定义的监控脚本，可以自动从Pixie收
   --skip-verify=true
 
 # 执行HTTP概览脚本
-./observo-connector --builtin-script http_overview \
+./o11y-hub --builtin-script http_overview \
   --script-params "start_time=-10m,namespace=default" \
   --address vizier-query-broker-svc.pl.svc.cluster.local:50300 \
   --cluster-id demo-cluster \
@@ -151,7 +151,7 @@ Observo Connector 包含多个预定义的监控脚本，可以自动从Pixie收
 
 ```bash
 # 启动服务器以提供Prometheus指标
-./observo-connector --server \
+./o11y-hub --server \
   --port 8080 \
   --address vizier-query-broker-svc.pl.svc.cluster.local:50300 \
   --cluster-id demo-cluster \
@@ -199,7 +199,7 @@ curl "http://localhost:8080/api/v1/metrics?script=resource_usage&start_time=-10m
 ```yaml
 # prometheus.yml
 scrape_configs:
-  - job_name: 'observo-connector'
+  - job_name: 'o11y-hub'
     static_configs:
       - targets: ['localhost:8080']
     metrics_path: '/api/v1/metrics'
@@ -365,12 +365,12 @@ kubectl apply -f k8s/
 
 ```bash
 # 构建镜像
-docker build -t observo-connector .
+docker build -t o11y-hub .
 
 # 运行容器
 docker run -p 8080:8080 \
   -v $(pwd)/certs:/app/certs \
-  observo-connector server \
+  o11y-hub server \
   --port=8080 \
   --cluster-id=my-cluster \
   --address=localhost:50051 \
@@ -445,7 +445,7 @@ connector提供以下内置指标：
 
 ```bash
 # 启用详细日志
-./observo-connector server --log-level=debug
+./o11y-hub server --log-level=debug
 ```
 
 ## 贡献
@@ -481,7 +481,7 @@ go mod tidy
 make build
 
 # 或者手动构建
-go build -o observo-connector ./cmd
+go build -o o11y-hub ./cmd
 ```
 
 ### 3. 使用示例
@@ -490,13 +490,13 @@ go build -o observo-connector ./cmd
 
 ```bash
 # 健康检查
-./observo-connector health \
+./o11y-hub health \
     --cluster-id=your-cluster-id \
     --address=vizier.pixie.svc.cluster.local:50300 \
     --skip-verify=true
 
 # 执行PxL查询
-./observo-connector query "df.head(5)" \
+./o11y-hub query "df.head(5)" \
     --cluster-id=your-cluster-id \
     --address=vizier.pixie.svc.cluster.local:50300 \
     --skip-verify=true
@@ -506,14 +506,14 @@ go build -o observo-connector ./cmd
 
 ### 开发环境（跳过验证）
 ```bash
-./observo-connector query "df.head(5)" \
+./o11y-hub query "df.head(5)" \
     --address=vizier.example.com:50300 \
     --skip-verify=true
 ```
 
 ### 生产环境（完整TLS验证）
 ```bash
-./observo-connector query "df.head(5)" \
+./o11y-hub query "df.head(5)" \
     --address=vizier.example.com:50300 \
     --ca-cert=certs/ca.crt \
     --client-cert=certs/client.crt \
@@ -623,5 +623,5 @@ TLS选项:
 
 ## 社区
 
-- 提交Issue: [GitHub Issues](https://github.com/observo-io/observo-connector/issues)
-- 讨论: [GitHub Discussions](https://github.com/observo-io/observo-connector/discussions)
+- 提交Issue: [GitHub Issues](https://github.com/observo-io/o11y-hub/issues)
+- 讨论: [GitHub Discussions](https://github.com/observo-io/o11y-hub/discussions)

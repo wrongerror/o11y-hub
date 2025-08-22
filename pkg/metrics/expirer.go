@@ -6,7 +6,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/wrongerror/observo-connector/pkg/expire"
+	"github.com/wrongerror/o11y-hub/pkg/expire"
 )
 
 func plog() *slog.Logger {

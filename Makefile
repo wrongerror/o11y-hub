@@ -2,7 +2,7 @@
 
 # Variables
 PROTO_DIR = proto
-BINARY_NAME = observo-connector
+BINARY_NAME = o11y-hub
 SERVER_PORT = 8080
 
 # Default target
@@ -62,7 +62,7 @@ run-server: build
 		--address=localhost:50051 \
 		--disable-ssl
 
-# Install observo-connector binary to system
+# Install o11y-hub binary to system
 install: build
 	@echo "Installing $(BINARY_NAME) to /usr/local/bin..."
 	sudo cp $(BINARY_NAME) /usr/local/bin/
@@ -82,7 +82,7 @@ fmt:
 # Show help
 help:
 	@echo "Available commands:"
-	@echo "  make build         - Build the observo-connector binary"
+	@echo "  make build         - Build the o11y-hub binary"
 	@echo "  make proto         - Generate protobuf code"
 	@echo "  make test          - Run tests"
 	@echo "  make clean         - Clean generated files"

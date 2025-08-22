@@ -9,10 +9,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 
-	"github.com/wrongerror/observo-connector/pkg/collector"
-	"github.com/wrongerror/observo-connector/pkg/k8s"
-	"github.com/wrongerror/observo-connector/pkg/scripts"
-	"github.com/wrongerror/observo-connector/pkg/vizier"
+	"github.com/wrongerror/o11y-hub/pkg/collector"
+	"github.com/wrongerror/o11y-hub/pkg/k8s"
+	"github.com/wrongerror/o11y-hub/pkg/scripts"
+	"github.com/wrongerror/o11y-hub/pkg/vizier"
 )
 
 // Collector implements collector.Collector for Pixie/Vizier

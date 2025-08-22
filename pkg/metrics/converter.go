@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wrongerror/observo-connector/pkg/common"
+	"github.com/wrongerror/o11y-hub/pkg/common"
 )
 
 // PrometheusConverter converts script results to Prometheus metrics

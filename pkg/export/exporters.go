@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wrongerror/observo-connector/pkg/common"
+	"github.com/wrongerror/o11y-hub/pkg/common"
 )
 
 // DataExporter 数据导出器接口

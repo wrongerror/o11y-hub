@@ -1532,7 +1532,7 @@ const file_proto_vizierapi_simple_proto_rawDesc = "" +
 	"\x13ST_SCRIPT_REFERENCE\x10\xb8\x172\xcd\x01\n" +
 	"\rVizierService\x12Z\n" +
 	"\vHealthCheck\x12#.px.api.vizierpb.HealthCheckRequest\x1a$.px.api.vizierpb.HealthCheckResponse0\x01\x12`\n" +
-	"\rExecuteScript\x12%.px.api.vizierpb.ExecuteScriptRequest\x1a&.px.api.vizierpb.ExecuteScriptResponse0\x01B/Z-github.com/wrongerror/observo-connector/protob\x06proto3"
+	"\rExecuteScript\x12%.px.api.vizierpb.ExecuteScriptRequest\x1a&.px.api.vizierpb.ExecuteScriptResponse0\x01B/Z-github.com/wrongerror/o11y-hub/protob\x06proto3"
 
 var (
 	file_proto_vizierapi_simple_proto_rawDescOnce sync.Once

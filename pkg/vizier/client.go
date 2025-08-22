@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/wrongerror/observo-connector/pkg/auth"
-	"github.com/wrongerror/observo-connector/pkg/common"
-	pb "github.com/wrongerror/observo-connector/proto"
+	"github.com/wrongerror/o11y-hub/pkg/auth"
+	"github.com/wrongerror/o11y-hub/pkg/common"
+	pb "github.com/wrongerror/o11y-hub/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"

@@ -11,8 +11,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/wrongerror/observo-connector/pkg/collector"
-	"github.com/wrongerror/observo-connector/pkg/server"
+	"github.com/wrongerror/o11y-hub/pkg/collector"
+	"github.com/wrongerror/o11y-hub/pkg/server"
 )
 
 var (
@@ -23,7 +23,7 @@ var (
 	vizierAddress   = flag.String("address", "localhost:50300", "Vizier gRPC address")
 	vizierClusterID = flag.String("cluster-id", "", "Pixie cluster ID")
 	jwtKey          = flag.String("jwt-key", "", "JWT signing key")
-	jwtService      = flag.String("jwt-service", "observo-connector", "JWT service name")
+	jwtService      = flag.String("jwt-service", "o11y-hub", "JWT service name")
 
 	// TLS configuration
 	tlsEnabled    = flag.Bool("tls", false, "Enable TLS for Vizier connection")

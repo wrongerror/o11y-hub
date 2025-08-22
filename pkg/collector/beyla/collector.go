@@ -13,7 +13,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"github.com/sirupsen/logrus"
 
-	"github.com/wrongerror/observo-connector/pkg/collector"
+	"github.com/wrongerror/o11y-hub/pkg/collector"
 )
 
 // Collector implements collector.Collector for Beyla

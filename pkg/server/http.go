@@ -13,9 +13,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 
-	"github.com/wrongerror/observo-connector/pkg/collector"
-	_ "github.com/wrongerror/observo-connector/pkg/collector/beyla"  // Register beyla collector
-	_ "github.com/wrongerror/observo-connector/pkg/collector/vizier" // Register vizier collector
+	"github.com/wrongerror/o11y-hub/pkg/collector"
+	_ "github.com/wrongerror/o11y-hub/pkg/collector/beyla"  // Register beyla collector
+	_ "github.com/wrongerror/o11y-hub/pkg/collector/vizier" // Register vizier collector
 )
 
 // Handler implements the HTTP handler with collector-based metrics

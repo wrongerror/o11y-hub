@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package px.api.vizierpb;
 
-option go_package = "github.com/wrongerror/observo-connector/proto";
+option go_package = "github.com/wrongerror/o11y-hub/proto";
 
 // Data types supported by the execution engine
 enum DataType {

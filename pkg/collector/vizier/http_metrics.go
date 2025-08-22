@@ -9,9 +9,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 
-	"github.com/wrongerror/observo-connector/pkg/expire"
-	"github.com/wrongerror/observo-connector/pkg/k8s"
-	"github.com/wrongerror/observo-connector/pkg/metrics"
+	"github.com/wrongerror/o11y-hub/pkg/expire"
+	"github.com/wrongerror/o11y-hub/pkg/k8s"
+	"github.com/wrongerror/o11y-hub/pkg/metrics"
 )
 
 // HTTPMetrics manages Prometheus histogram metrics for HTTP requests

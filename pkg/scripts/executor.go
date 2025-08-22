@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/wrongerror/observo-connector/pkg/common"
-	"github.com/wrongerror/observo-connector/pkg/vizier"
+	"github.com/wrongerror/o11y-hub/pkg/common"
+	"github.com/wrongerror/o11y-hub/pkg/vizier"
 )
 
 // Executor manages script execution and result handling

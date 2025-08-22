@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-observo-connector
+o11y-hub
 main
 bin/main
 
