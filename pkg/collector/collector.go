@@ -12,24 +12,24 @@ import (
 )
 
 // Namespace defines the common namespace for all metrics
-const Namespace = "observo_connector"
+const Namespace = "o11y_hub"
 
 var (
 	scrapeDurationDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(Namespace, "scrape", "collector_duration_seconds"),
-		"observo_connector: Duration of a collector scrape.",
+		"o11y_hub: Duration of a collector scrape.",
 		[]string{"collector"},
 		nil,
 	)
 	scrapeSuccessDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(Namespace, "scrape", "collector_success"),
-		"observo_connector: Whether a collector succeeded.",
+		"o11y_hub: Whether a collector succeeded.",
 		[]string{"collector"},
 		nil,
 	)
 	scrapeLastTimeDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(Namespace, "scrape", "last_scrape_timestamp_seconds"),
-		"observo_connector: Timestamp of the last scrape.",
+		"o11y_hub: Timestamp of the last scrape.",
 		[]string{"collector"},
 		nil,
 	)

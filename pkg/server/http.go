@@ -192,17 +192,15 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // handleLandingPage handles the landing page
 func (s *Server) handleLandingPage(w http.ResponseWriter, r *http.Request) {
-	landingPage := `<html>
-<head><title>Observo Connector</title></head>
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, `<html>
+<head><title>O11y Hub</title></head>
 <body>
-<h1>Observo Connector</h1>
+<h1>O11y Hub</h1>
 <p><a href="/metrics">Metrics</a></p>
 <p><a href="/health">Health</a></p>
 </body>
-</html>`
-	w.Header().Set("Content-Type", "text/html")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(landingPage))
+</html>`)
 }
 
 // loggingMiddleware provides request logging

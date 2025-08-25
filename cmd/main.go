@@ -68,7 +68,7 @@ func main() {
 		"version":    version,
 		"build_date": buildDate,
 		"git_commit": gitCommit,
-	}).Info("Starting Observo Connector")
+	}).Info("Starting O11y Hub")
 
 	// Validate required parameters for Vizier
 	collectors := parseCollectors(*enabledCollectors)
