@@ -11,28 +11,18 @@ import (
 
 	"github.com/wrongerror/o11y-hub/pkg/collector"
 	"github.com/wrongerror/o11y-hub/pkg/k8s"
-	"github.com/wrongerror/o11y-hub/pkg/scripts"
 	"github.com/wrongerror/o11y-hub/pkg/vizier"
 )
 
 // Collector implements collector.Collector for Pixie/Vizier
 type Collector struct {
-	logger         *logrus.Logger
-	config         collector.Config
-	vizierClient   *vizier.Client
-	scriptExecutor *scripts.Executor
-	k8sManager     *k8s.Manager
+	logger       *logrus.Logger
+	config       collector.Config
+	vizierClient *vizier.Client
+	k8sManager   *k8s.Manager
 
 	// HTTP metrics with expiring histograms
 	httpMetrics *HTTPMetrics
-
-	// Resource metric descriptors
-	serviceCPUUsage    *collector.TypedDesc
-	serviceMemoryUsage *collector.TypedDesc
-
-	// Network metric descriptors
-	networkBytesTotal       *collector.TypedDesc
-	networkConnectionsTotal *collector.TypedDesc
 }
 
 // NewCollector creates a new Vizier collector
@@ -65,9 +55,6 @@ func NewCollector(logger *logrus.Logger, config collector.Config) (collector.Col
 		return nil, fmt.Errorf("failed to create vizier client: %w", err)
 	}
 
-	// Create script executor
-	scriptExecutor := scripts.NewExecutor(vizierClient, logger)
-
 	// Create K8s manager
 	k8sManager, err := k8s.NewManager(logger, config.KubeconfigPath)
 	if err != nil {
@@ -76,42 +63,13 @@ func NewCollector(logger *logrus.Logger, config collector.Config) (collector.Col
 	}
 
 	collector := &Collector{
-		logger:         logger,
-		config:         config,
-		vizierClient:   vizierClient,
-		scriptExecutor: scriptExecutor,
-		k8sManager:     k8sManager,
+		logger:       logger,
+		config:       config,
+		vizierClient: vizierClient,
+		k8sManager:   k8sManager,
 
 		// Initialize HTTP metrics with histograms and TTL support
 		httpMetrics: NewHTTPMetrics(logger),
-
-		// Define resource metric descriptors
-		serviceCPUUsage: collector.NewTypedDesc(
-			"service_cpu_usage_nanoseconds_total",
-			"Service CPU usage in nanoseconds",
-			prometheus.CounterValue,
-			[]string{"service", "namespace", "pod"},
-		),
-		serviceMemoryUsage: collector.NewTypedDesc(
-			"service_memory_usage_bytes",
-			"Service memory usage in bytes",
-			prometheus.GaugeValue,
-			[]string{"service", "namespace", "pod"},
-		),
-
-		// Define network metric descriptors
-		networkBytesTotal: collector.NewTypedDesc(
-			"network_bytes_total",
-			"Total network bytes transferred",
-			prometheus.CounterValue,
-			[]string{"service", "direction", "protocol"},
-		),
-		networkConnectionsTotal: collector.NewTypedDesc(
-			"network_connections_total",
-			"Total network connections",
-			prometheus.CounterValue,
-			[]string{"service", "state", "protocol"},
-		),
 	}
 
 	// Start K8s manager if available
@@ -137,16 +95,6 @@ func (c *Collector) Update(ch chan<- prometheus.Metric) error {
 	// Collect HTTP metrics
 	if err := c.collectHTTPMetrics(ctx, ch); err != nil {
 		c.logger.WithError(err).Warn("Failed to collect HTTP metrics")
-	}
-
-	// Collect resource metrics
-	if err := c.collectResourceMetrics(ctx, ch); err != nil {
-		c.logger.WithError(err).Warn("Failed to collect resource metrics")
-	}
-
-	// Collect network metrics
-	if err := c.collectNetworkMetrics(ctx, ch); err != nil {
-		c.logger.WithError(err).Warn("Failed to collect network metrics")
 	}
 
 	return nil
@@ -230,99 +178,6 @@ px.display(df, 'http_events')
 
 	// Collect all histogram metrics
 	c.httpMetrics.Collect(ch)
-
-	return nil
-}
-
-// collectResourceMetrics collects CPU and memory metrics
-func (c *Collector) collectResourceMetrics(ctx context.Context, ch chan<- prometheus.Metric) error {
-	// Execute resource_usage script
-	params := map[string]string{
-		"start_time": "-5m",
-		"namespace":  "",
-	}
-
-	result, err := c.scriptExecutor.ExecuteBuiltinScriptForMetrics(ctx, c.config.VizierClusterID, "resource_usage", params)
-	if err != nil {
-		return fmt.Errorf("failed to execute resource_usage script: %w", err)
-	}
-
-	if result == nil || len(result.Data) == 0 {
-		return collector.ErrNoData
-	}
-
-	// Convert data to metrics
-	for _, row := range result.Data {
-		service, ok := row["service"].(string)
-		if !ok {
-			continue
-		}
-
-		namespace := getStringValue(row, "namespace", "default")
-		pod := getStringValue(row, "pod", "unknown")
-
-		// CPU usage
-		if cpuUsage, ok := row["avg_cpu_usage"]; ok {
-			if cpuVal, err := parseFloat64(cpuUsage); err == nil {
-				ch <- c.serviceCPUUsage.MustNewConstMetric(cpuVal, service, namespace, pod)
-			}
-		}
-
-		// Memory usage in bytes
-		if memUsage, ok := row["avg_memory_bytes"]; ok {
-			if memVal, err := parseFloat64(memUsage); err == nil {
-				ch <- c.serviceMemoryUsage.MustNewConstMetric(memVal, service, namespace, pod)
-			}
-		}
-	}
-
-	return nil
-}
-
-// collectNetworkMetrics collects network-related metrics
-func (c *Collector) collectNetworkMetrics(ctx context.Context, ch chan<- prometheus.Metric) error {
-	// Execute network_stats script
-	params := map[string]string{
-		"start_time": "-5m",
-		"namespace":  "",
-	}
-
-	result, err := c.scriptExecutor.ExecuteBuiltinScriptForMetrics(ctx, c.config.VizierClusterID, "network_stats", params)
-	if err != nil {
-		return fmt.Errorf("failed to execute network_stats script: %w", err)
-	}
-
-	if result == nil || len(result.Data) == 0 {
-		return collector.ErrNoData
-	}
-
-	// Convert data to metrics
-	for _, row := range result.Data {
-		service, ok := row["service"].(string)
-		if !ok {
-			continue
-		}
-
-		// Network bytes sent/received
-		if bytesRx, ok := row["bytes_rx"]; ok {
-			if bytesRxVal, err := parseFloat64(bytesRx); err == nil {
-				ch <- c.networkBytesTotal.MustNewConstMetric(bytesRxVal, service, "rx", "tcp")
-			}
-		}
-
-		if bytesTx, ok := row["bytes_tx"]; ok {
-			if bytesTxVal, err := parseFloat64(bytesTx); err == nil {
-				ch <- c.networkBytesTotal.MustNewConstMetric(bytesTxVal, service, "tx", "tcp")
-			}
-		}
-
-		// Network connections
-		if connections, ok := row["active_connections"]; ok {
-			if connVal, err := parseFloat64(connections); err == nil {
-				ch <- c.networkConnectionsTotal.MustNewConstMetric(connVal, service, "established", "tcp")
-			}
-		}
-	}
 
 	return nil
 }
