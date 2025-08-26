@@ -3,7 +3,6 @@ package vizier
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -23,6 +22,8 @@ type Collector struct {
 
 	// HTTP metrics with expiring histograms
 	httpMetrics *HTTPMetrics
+	// Network flow metrics with expiring counters
+	networkMetrics *NetworkMetrics
 }
 
 // NewCollector creates a new Vizier collector
@@ -70,12 +71,16 @@ func NewCollector(logger *logrus.Logger, config collector.Config) (collector.Col
 
 		// Initialize HTTP metrics with histograms and TTL support
 		httpMetrics: NewHTTPMetrics(logger),
+		// Initialize network flow metrics with counters and TTL support
+		networkMetrics: NewNetworkMetrics(logger),
 	}
 
 	// Start K8s manager if available
 	if collector.k8sManager != nil {
 		// Set K8s manager for HTTP metrics
 		collector.httpMetrics.SetK8sManager(collector.k8sManager)
+		// Set K8s manager for network metrics
+		collector.networkMetrics.SetK8sManager(collector.k8sManager)
 
 		go func() {
 			if err := collector.k8sManager.Start(context.Background()); err != nil {
@@ -95,6 +100,11 @@ func (c *Collector) Update(ch chan<- prometheus.Metric) error {
 	// Collect HTTP metrics
 	if err := c.collectHTTPMetrics(ctx, ch); err != nil {
 		c.logger.WithError(err).Warn("Failed to collect HTTP metrics")
+	}
+
+	// Collect network flow metrics
+	if err := c.collectNetworkMetrics(ctx, ch); err != nil {
+		c.logger.WithError(err).Warn("Failed to collect network flow metrics")
 	}
 
 	return nil
@@ -182,7 +192,100 @@ px.display(df, 'http_events')
 	return nil
 }
 
-// Helper functions
+// collectNetworkMetrics collects network flow metrics from Vizier conn_stats table
+func (c *Collector) collectNetworkMetrics(ctx context.Context, ch chan<- prometheus.Metric) error {
+	// Execute PxL script to get connection stats from conn_stats table
+	script := `import px
+
+# Get connection stats from the last 30 seconds
+df = px.DataFrame(table='conn_stats', start_time='-30s')
+
+# Extract ctx metadata fields for local endpoint
+df.src_namespace = df.ctx['namespace']
+df.src_pod_name = df.ctx['pod_name']
+df.src_service_name = df.ctx['service']
+df.src_node_name = df.ctx['node_name']
+
+# Resolve destination endpoint information using Pixie's built-in functions
+df.dst_pod_id = px.ip_to_pod_id(df.remote_addr)
+df.dst_pod_name = px.pod_id_to_pod_name(df.dst_pod_id)
+df.dst_service_name = px.pod_id_to_service_name(df.dst_pod_id)
+df.dst_namespace = px.pod_id_to_namespace(df.dst_pod_id)
+df.dst_node_name = px.pod_id_to_node_name(df.dst_pod_id)
+
+# Add source and destination addresses for clarity
+# For conn_stats, we don't have a direct local_addr field
+# We'll need to get the local IP from the context or leave it empty
+df.src_address = ''  # Will be filled by Go code using K8s manager
+df.dst_address = df.remote_addr
+
+# Add source type based on context
+df.src_type = px.select(df.src_service_name != '', 'service', 
+              px.select(df.src_pod_name != '', 'pod',
+              px.select(df.src_node_name != '', 'node', 'ip')))
+
+# Add destination type based on resolved info
+df.dst_type = px.select(df.dst_service_name != '', 'service',
+              px.select(df.dst_pod_name != '', 'pod', 
+              px.select(df.dst_node_name != '', 'node', 'ip')))
+
+# We'll need to add owner info in Go using K8s manager
+df.src_owner_name = ''
+df.src_owner_type = ''
+df.dst_owner_name = ''
+df.dst_owner_type = ''
+
+# Display all fields including resolved destination endpoint info
+px.display(df, 'conn_stats')
+`
+
+	result, err := c.vizierClient.ExecuteScriptAndExtractData(ctx, c.config.VizierClusterID, script)
+	if err != nil {
+		return fmt.Errorf("failed to execute conn_stats script: %w", err)
+	}
+
+	if result == nil || len(result.Data) == 0 {
+		return collector.ErrNoData
+	}
+
+	// Log network flow data
+	c.logger.Infof("Found %d connection stats events", len(result.Data))
+
+	// Process each network flow event record
+	eventCount := 0
+	processedCount := 0
+
+	for i, row := range result.Data {
+		eventCount++
+
+		if i < 2 { // Only log first 2 records to avoid spam
+			c.logger.Infof("=== Connection Stats Event %d ===", i+1)
+			c.logger.Infof("Flow: %v:%v -> %v:%v (role=%v)",
+				row["src_address"], row["local_port"], row["dst_address"], row["remote_port"], row["trace_role"])
+			c.logger.Infof("Bytes: sent=%v, recv=%v", row["bytes_sent"], row["bytes_recv"])
+			c.logger.Infof("Connections: open=%v, close=%v, active=%v", row["conn_open"], row["conn_close"], row["conn_active"])
+			c.logger.Infof("Source: ns=%v, pod=%v, svc=%v, node=%v",
+				row["src_namespace"], row["src_pod_name"], row["src_service_name"], row["src_node_name"])
+			c.logger.Infof("Destination: ns=%v, pod=%v, svc=%v, node=%v",
+				row["dst_namespace"], row["dst_pod_name"], row["dst_service_name"], row["dst_node_name"])
+		}
+
+		// Process event with the network metrics system
+		if err := c.networkMetrics.ProcessNetworkEvent(row); err != nil {
+			c.logger.WithError(err).Debug("Failed to process connection stats event")
+		} else {
+			processedCount++
+		}
+	}
+
+	c.logger.Infof("Processed %d/%d connection stats events successfully", processedCount, eventCount)
+
+	// Collect all counter metrics
+	c.networkMetrics.Collect(ch)
+
+	return nil
+}
+
 func parseFloat64(value interface{}) (float64, error) {
 	switch v := value.(type) {
 	case float64:
@@ -194,7 +297,7 @@ func parseFloat64(value interface{}) (float64, error) {
 	case int64:
 		return float64(v), nil
 	case string:
-		return strconv.ParseFloat(v, 64)
+		return 0, fmt.Errorf("cannot convert string %q to float64", v)
 	default:
 		return 0, fmt.Errorf("cannot convert %T to float64", value)
 	}
