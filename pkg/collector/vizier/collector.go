@@ -195,7 +195,7 @@ px.display(df, 'http_events')
 // collectNetworkMetrics collects network flow metrics from Vizier conn_stats table
 func (c *Collector) collectNetworkMetrics(ctx context.Context, ch chan<- prometheus.Metric) error {
 	// Execute PxL script to get connection stats from conn_stats table
-	// Based on connection_throughput_stats from pxviews.pxl
+	// Based on connection_throughput_stats from pxviews.pxl and net_flow_graph.pxl patterns
 	script := `import px
 
 # Get connection stats from the last 30 seconds
@@ -203,24 +203,33 @@ df = px.DataFrame(table='conn_stats', start_time='-30s')
 
 # Extract pod_id and context metadata BEFORE aggregation
 df.pod_id = df.ctx['pod_id']
+df.pod = df.ctx['pod']  # For filtering non-k8s sources
 df.src_namespace = df.ctx['namespace']
 df.src_pod_name = df.ctx['pod_name']
 df.src_service_name = df.ctx['service']
 df.src_node_name = df.ctx['node_name']
 
+# Filter out any non-k8s sources (following net_flow_graph.pxl pattern)
+df = df[df.pod != '']
+
 # Resolve destination endpoint information BEFORE aggregation
-# Note: This only works for cluster-internal IPs, external IPs will have empty values
+# This provides the highest priority resolution for cluster-internal IPs
 df.dst_pod_id = px.ip_to_pod_id(df.remote_addr)
 df.dst_pod_name = px.pod_id_to_pod_name(df.dst_pod_id)
 df.dst_service_name = px.pod_id_to_service_name(df.dst_pod_id)
 df.dst_namespace = px.pod_id_to_namespace(df.dst_pod_id)
 df.dst_node_name = px.pod_id_to_node_name(df.dst_pod_id)
 
+# For IPs that couldn't be resolved by Pixie (external IPs, some node IPs),
+# use nslookup as fallback (following net_flow_graph.pxl pattern)
+df.dst_nslookup = px.nslookup(df.remote_addr)
+
 # Now perform aggregation with all needed fields
 # Group by all identity fields to preserve endpoint information
 df = df.groupby(['upid', 'trace_role', 'remote_addr', 'pod_id', 'dst_pod_id',
                 'src_namespace', 'src_pod_name', 'src_service_name', 'src_node_name',
-                'dst_pod_name', 'dst_service_name', 'dst_namespace', 'dst_node_name']).agg(
+                'dst_pod_name', 'dst_service_name', 'dst_namespace', 'dst_node_name',
+                'dst_nslookup']).agg(
     bytes_recv=('bytes_recv', px.max),
     bytes_sent=('bytes_sent', px.max),
     time_=('time_', px.max),
@@ -236,7 +245,8 @@ df.src_type = px.select(df.src_service_name != '', 'service',
               px.select(df.src_pod_name != '', 'pod',
               px.select(df.src_node_name != '', 'node', 'ip')))
 
-# For destination: prefer service > pod > node > ip (external IPs will be 'ip')
+# For destination: prefer service > pod > node > ip
+# Don't distinguish between external/internal IPs at PxL level, let Go code handle it
 df.dst_type = px.select(df.dst_service_name != '', 'service',
               px.select(df.dst_pod_name != '', 'pod', 
               px.select(df.dst_node_name != '', 'node', 'ip')))

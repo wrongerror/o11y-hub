@@ -148,6 +148,22 @@ func (m *NetworkMetrics) ProcessNetworkEvent(event map[string]interface{}) error
 	dstOwnerName := getStringValueFromEvent(event, "dst_owner_name", "")
 	dstOwnerType := getStringValueFromEvent(event, "dst_owner_type", "")
 
+	// Get nslookup result for fallback resolution
+	dstNslookup := getStringValueFromEvent(event, "dst_nslookup", "")
+
+	// Log original PxL data for debugging key IPs
+	if dstAddress == "10.233.0.1" || dstAddress == "172.31.17.20" {
+		m.logger.WithFields(logrus.Fields{
+			"dst_address":       dstAddress,
+			"pxl_dst_type":      dstType,
+			"pxl_dst_service":   dstServiceName,
+			"pxl_dst_pod":       dstPodNameRaw,
+			"pxl_dst_node":      dstNodeName,
+			"pxl_dst_namespace": dstNamespace,
+			"dst_nslookup":      dstNslookup,
+		}).Debug("Original PxL data for key IP")
+	}
+
 	// Determine trace role from original trace_role field
 	traceRoleRaw := getStringValueFromEvent(event, "trace_role", "1")
 	var traceRole string
@@ -196,29 +212,76 @@ func (m *NetworkMetrics) ProcessNetworkEvent(event map[string]interface{}) error
 		if dstOwnerName == "" && dstOwnerType == "" && dstNamespace != "" && dstPodName != "" {
 			dstOwnerName, dstOwnerType = m.k8sManager.GetPodOwnerInfo(dstNamespace, dstPodName)
 		}
+	}
 
-		// For destination addresses that are not resolved by PxL (like Node IPs),
-		// try to get endpoint info from K8s manager
-		if dstAddress != "" && (dstNamespace == "" || dstNodeName == "" || dstOwnerName == "") {
-			if endpointInfo := m.k8sManager.GetEndpointInfo(dstAddress); endpointInfo != nil {
-				// Only update empty fields
-				if dstNamespace == "" && endpointInfo.Namespace != "" {
-					dstNamespace = endpointInfo.Namespace
-				}
-				if dstNodeName == "" && endpointInfo.NodeName != "" {
-					dstNodeName = endpointInfo.NodeName
-				}
-				if dstOwnerName == "" && endpointInfo.OwnerName != "" {
-					dstOwnerName = endpointInfo.OwnerName
-				}
-				if dstOwnerType == "" && endpointInfo.OwnerType != "" {
-					dstOwnerType = endpointInfo.OwnerType
-				}
-				if dstType == "ip" && endpointInfo.Type != "ip" {
-					dstType = string(endpointInfo.Type)
-				}
+	// Use nslookup result for DNS-based service resolution
+	// Only for IPs that haven't been resolved by PxL and aren't node IPs
+	originalDstType := dstType
+	if dstType == "ip" && dstNslookup != "" && dstNslookup != dstAddress {
+		m.logger.WithFields(logrus.Fields{
+			"dst_address":   dstAddress,
+			"dst_nslookup":  dstNslookup,
+			"original_type": originalDstType,
+		}).Debug("Processing DNS fallback for IP")
+
+		// Parse DNS name to determine if it's K8s internal or external
+		parsedNamespace, parsedServiceName := parseKubernetesDNS(dstNslookup)
+		if parsedNamespace != "" && parsedServiceName != "" {
+			// This is a K8s cluster internal DNS name
+			if dstNamespace == "" {
+				dstNamespace = parsedNamespace
 			}
+			if dstServiceName == "" {
+				dstServiceName = fmt.Sprintf("%s/%s", parsedNamespace, parsedServiceName)
+			}
+
+			// Special handling for node IPs: check if this is actually a node IP
+			// If it's a node IP, keep it as node type and set the node name
+			if m.k8sManager != nil {
+				if endpointInfo := m.k8sManager.GetEndpointInfo(dstAddress); endpointInfo != nil && endpointInfo.Type == k8s.EndpointTypeNode {
+					dstNodeName = endpointInfo.NodeName
+					dstType = "node"
+					m.logger.WithFields(logrus.Fields{
+						"dst_address":      dstAddress,
+						"node_name":        endpointInfo.NodeName,
+						"service_from_dns": dstServiceName,
+					}).Debug("Node IP with K8s DNS - classified as node, service name preserved")
+				} else {
+					// Not a node IP, classify as service
+					dstType = "service"
+					m.logger.WithFields(logrus.Fields{
+						"dst_address":      dstAddress,
+						"parsed_namespace": parsedNamespace,
+						"parsed_service":   parsedServiceName,
+						"new_type":         dstType,
+					}).Debug("K8s DNS parsed for IP - classified as service")
+				}
+			} else {
+				// No k8s manager, default to service
+				dstType = "service"
+			}
+		} else {
+			// This is an external DNS name or simple hostname
+			if dstServiceName == "" {
+				dstServiceName = dstNslookup
+			}
+			// Keep as "ip" type for external addresses
+			m.logger.WithFields(logrus.Fields{
+				"dst_address":  dstAddress,
+				"external_dns": dstNslookup,
+			}).Debug("External DNS resolved for IP - keeping as ip type")
 		}
+	}
+
+	// Log final classification for key IPs
+	if dstAddress == "10.233.0.1" || dstAddress == "172.31.17.20" {
+		m.logger.WithFields(logrus.Fields{
+			"dst_address":         dstAddress,
+			"final_dst_type":      dstType,
+			"final_dst_service":   dstServiceName,
+			"final_dst_node":      dstNodeName,
+			"final_dst_namespace": dstNamespace,
+		}).Debug("Final classification for key IP")
 	}
 
 	// Ensure we have some value for srcAddress
@@ -369,4 +432,33 @@ func getStringValueFromEvent(event map[string]interface{}, key, defaultValue str
 		}
 	}
 	return defaultValue
+}
+
+// parseKubernetesDNS parses Kubernetes DNS names to extract namespace and service name
+// Examples:
+// - "kubernetes.default.svc.cluster.local" -> ("default", "kubernetes")
+// - "ingester-whizard-0.ingester-whizard-operated.kubesphere-monitoring-system.svc.cluster.local" -> ("kubesphere-monitoring-system", "ingester-whizard-operated")
+// - "172-31-17-20.calico-exporter-bgp.kubesphere-monitoring-system.svc.cluster.local" -> ("kubesphere-monitoring-system", "calico-exporter-bgp")
+// - "localhost" -> ("", "")
+func parseKubernetesDNS(dnsName string) (namespace, serviceName string) {
+	// Check if this is a Kubernetes cluster DNS name (ends with .svc.cluster.local)
+	if !strings.HasSuffix(dnsName, ".svc.cluster.local") {
+		return "", ""
+	}
+
+	// Remove the .svc.cluster.local suffix
+	name := strings.TrimSuffix(dnsName, ".svc.cluster.local")
+
+	// Split by dots: [pod/service-name].[service-name].[namespace]
+	parts := strings.Split(name, ".")
+	if len(parts) < 2 {
+		return "", ""
+	}
+
+	// The namespace is always the second-to-last part
+	// The service name is always the last part
+	namespace = parts[len(parts)-1]
+	serviceName = parts[len(parts)-2]
+
+	return namespace, serviceName
 }
