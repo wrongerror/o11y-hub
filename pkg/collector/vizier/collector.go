@@ -195,47 +195,55 @@ px.display(df, 'http_events')
 // collectNetworkMetrics collects network flow metrics from Vizier conn_stats table
 func (c *Collector) collectNetworkMetrics(ctx context.Context, ch chan<- prometheus.Metric) error {
 	// Execute PxL script to get connection stats from conn_stats table
+	// Based on connection_throughput_stats from pxviews.pxl
 	script := `import px
 
 # Get connection stats from the last 30 seconds
 df = px.DataFrame(table='conn_stats', start_time='-30s')
 
-# Extract ctx metadata fields for local endpoint
+# Extract pod_id and context metadata BEFORE aggregation
+df.pod_id = df.ctx['pod_id']
 df.src_namespace = df.ctx['namespace']
 df.src_pod_name = df.ctx['pod_name']
 df.src_service_name = df.ctx['service']
 df.src_node_name = df.ctx['node_name']
 
-# Resolve destination endpoint information using Pixie's built-in functions
+# Resolve destination endpoint information BEFORE aggregation
 df.dst_pod_id = px.ip_to_pod_id(df.remote_addr)
 df.dst_pod_name = px.pod_id_to_pod_name(df.dst_pod_id)
 df.dst_service_name = px.pod_id_to_service_name(df.dst_pod_id)
 df.dst_namespace = px.pod_id_to_namespace(df.dst_pod_id)
 df.dst_node_name = px.pod_id_to_node_name(df.dst_pod_id)
 
-# Add source and destination addresses for clarity
-# For conn_stats, we don't have a direct local_addr field
-# We'll need to get the local IP from the context or leave it empty
+# Now perform aggregation with all needed fields
+df = df.groupby(['upid', 'trace_role', 'remote_addr', 'pod_id',
+                'src_namespace', 'src_pod_name', 'src_service_name', 'src_node_name',
+                'dst_pod_name', 'dst_service_name', 'dst_namespace', 'dst_node_name']).agg(
+    bytes_recv=('bytes_recv', px.max),
+    bytes_sent=('bytes_sent', px.max),
+    time_=('time_', px.max),
+)
+
+# Add source and destination addresses
 df.src_address = ''  # Will be filled by Go code using K8s manager
 df.dst_address = df.remote_addr
 
-# Add source type based on context
+# Add type fields based on resolved info
 df.src_type = px.select(df.src_service_name != '', 'service', 
               px.select(df.src_pod_name != '', 'pod',
               px.select(df.src_node_name != '', 'node', 'ip')))
 
-# Add destination type based on resolved info
 df.dst_type = px.select(df.dst_service_name != '', 'service',
               px.select(df.dst_pod_name != '', 'pod', 
               px.select(df.dst_node_name != '', 'node', 'ip')))
 
-# We'll need to add owner info in Go using K8s manager
+# Add empty owner fields (will be filled by Go code using K8s manager)
 df.src_owner_name = ''
 df.src_owner_type = ''
 df.dst_owner_name = ''
 df.dst_owner_type = ''
 
-# Display all fields including resolved destination endpoint info
+# Display final connection flow stats
 px.display(df, 'conn_stats')
 `
 
