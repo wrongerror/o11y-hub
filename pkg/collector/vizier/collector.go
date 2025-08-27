@@ -209,6 +209,7 @@ df.src_service_name = df.ctx['service']
 df.src_node_name = df.ctx['node_name']
 
 # Resolve destination endpoint information BEFORE aggregation
+# Note: This only works for cluster-internal IPs, external IPs will have empty values
 df.dst_pod_id = px.ip_to_pod_id(df.remote_addr)
 df.dst_pod_name = px.pod_id_to_pod_name(df.dst_pod_id)
 df.dst_service_name = px.pod_id_to_service_name(df.dst_pod_id)
@@ -216,7 +217,8 @@ df.dst_namespace = px.pod_id_to_namespace(df.dst_pod_id)
 df.dst_node_name = px.pod_id_to_node_name(df.dst_pod_id)
 
 # Now perform aggregation with all needed fields
-df = df.groupby(['upid', 'trace_role', 'remote_addr', 'pod_id',
+# Group by all identity fields to preserve endpoint information
+df = df.groupby(['upid', 'trace_role', 'remote_addr', 'pod_id', 'dst_pod_id',
                 'src_namespace', 'src_pod_name', 'src_service_name', 'src_node_name',
                 'dst_pod_name', 'dst_service_name', 'dst_namespace', 'dst_node_name']).agg(
     bytes_recv=('bytes_recv', px.max),
@@ -229,10 +231,12 @@ df.src_address = ''  # Will be filled by Go code using K8s manager
 df.dst_address = df.remote_addr
 
 # Add type fields based on resolved info
+# For source: prefer service > pod > node > ip
 df.src_type = px.select(df.src_service_name != '', 'service', 
               px.select(df.src_pod_name != '', 'pod',
               px.select(df.src_node_name != '', 'node', 'ip')))
 
+# For destination: prefer service > pod > node > ip (external IPs will be 'ip')
 df.dst_type = px.select(df.dst_service_name != '', 'service',
               px.select(df.dst_pod_name != '', 'pod', 
               px.select(df.dst_node_name != '', 'node', 'ip')))

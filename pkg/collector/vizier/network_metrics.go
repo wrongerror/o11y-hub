@@ -196,6 +196,29 @@ func (m *NetworkMetrics) ProcessNetworkEvent(event map[string]interface{}) error
 		if dstOwnerName == "" && dstOwnerType == "" && dstNamespace != "" && dstPodName != "" {
 			dstOwnerName, dstOwnerType = m.k8sManager.GetPodOwnerInfo(dstNamespace, dstPodName)
 		}
+
+		// For destination addresses that are not resolved by PxL (like Node IPs),
+		// try to get endpoint info from K8s manager
+		if dstAddress != "" && (dstNamespace == "" || dstNodeName == "" || dstOwnerName == "") {
+			if endpointInfo := m.k8sManager.GetEndpointInfo(dstAddress); endpointInfo != nil {
+				// Only update empty fields
+				if dstNamespace == "" && endpointInfo.Namespace != "" {
+					dstNamespace = endpointInfo.Namespace
+				}
+				if dstNodeName == "" && endpointInfo.NodeName != "" {
+					dstNodeName = endpointInfo.NodeName
+				}
+				if dstOwnerName == "" && endpointInfo.OwnerName != "" {
+					dstOwnerName = endpointInfo.OwnerName
+				}
+				if dstOwnerType == "" && endpointInfo.OwnerType != "" {
+					dstOwnerType = endpointInfo.OwnerType
+				}
+				if dstType == "ip" && endpointInfo.Type != "ip" {
+					dstType = string(endpointInfo.Type)
+				}
+			}
+		}
 	}
 
 	// Ensure we have some value for srcAddress
