@@ -239,12 +239,22 @@ func (m *NetworkMetrics) ProcessNetworkEvent(event map[string]interface{}) error
 					dstServiceName = fmt.Sprintf("%s/%s", parsedNamespace, parsedServiceName)
 					dstType = "service"
 
+					// Use the owner information from the pod metadata
+					if podInfo.OwnerName != "" {
+						dstOwnerName = podInfo.OwnerName
+					}
+					if podInfo.OwnerType != "" {
+						dstOwnerType = podInfo.OwnerType
+					}
+
 					m.logger.WithFields(logrus.Fields{
 						"dst_address":   dstAddress,
 						"pod_name":      podInfo.Name,
 						"pod_namespace": podInfo.Namespace,
 						"node_name":     podInfo.NodeName,
 						"service_name":  dstServiceName,
+						"owner_name":    dstOwnerName,
+						"owner_type":    dstOwnerType,
 					}).Debug("Found pod for K8s service endpoint via DNS and IP")
 				} else {
 					// Fallback: check if this is a node IP that happens to have a service DNS
@@ -306,6 +316,45 @@ func (m *NetworkMetrics) ProcessNetworkEvent(event map[string]interface{}) error
 			"final_dst_node":      dstNodeName,
 			"final_dst_namespace": dstNamespace,
 		}).Debug("Final classification for key IP")
+	}
+
+	// Try to derive srcAddress from K8s metadata if it's missing
+	if srcAddress == "" && m.k8sManager != nil {
+		// If we have pod information, try to get the pod IP
+		if srcNamespace != "" && srcPodNameRaw != "" {
+			// Extract just the pod name from namespace/name format
+			var srcPodName string
+			if strings.Contains(srcPodNameRaw, "/") {
+				parts := strings.SplitN(srcPodNameRaw, "/", 2)
+				if len(parts) == 2 {
+					srcPodName = parts[1]
+				}
+			} else {
+				srcPodName = srcPodNameRaw
+			}
+
+			if srcPodName != "" {
+				if podInfo := m.k8sManager.GetPodByNameAndNamespace(srcNamespace, srcPodName); podInfo != nil && podInfo.IP != "" {
+					srcAddress = podInfo.IP
+					m.logger.WithFields(logrus.Fields{
+						"src_namespace": srcNamespace,
+						"src_pod_name":  srcPodName,
+						"derived_ip":    srcAddress,
+					}).Debug("Derived srcAddress from K8s pod metadata")
+				}
+			}
+		}
+
+		// If still no srcAddress and we have node information, try to get node IP
+		if srcAddress == "" && srcNodeName != "" {
+			if nodeInfo := m.k8sManager.GetNodeByName(srcNodeName); nodeInfo != nil && nodeInfo.IP != "" {
+				srcAddress = nodeInfo.IP
+				m.logger.WithFields(logrus.Fields{
+					"src_node_name": srcNodeName,
+					"derived_ip":    srcAddress,
+				}).Debug("Derived srcAddress from K8s node metadata")
+			}
+		}
 	}
 
 	// Ensure we have some value for srcAddress

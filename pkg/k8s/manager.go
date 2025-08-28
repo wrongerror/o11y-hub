@@ -319,6 +319,40 @@ func (m *Manager) GetPodOwnerInfo(namespace, podName string) (string, string) {
 	return info.OwnerName, info.OwnerType
 }
 
+// GetPodByNameAndNamespace gets pod information by namespace and name
+func (m *Manager) GetPodByNameAndNamespace(namespace, podName string) *EndpointInfo {
+	key := namespace + "/" + podName
+
+	m.mutex.RLock()
+	info, exists := m.podsByName[key]
+	m.mutex.RUnlock()
+
+	if !exists {
+		logrus.Debugf("Pod %s not found in cache. Available pods: %d", key, len(m.podsByName))
+		return nil
+	}
+
+	logrus.Debugf("Found pod %s: IP=%s, Node=%s", key, info.IP, info.NodeName)
+	return info
+}
+
+// GetNodeByName gets node information by node name
+func (m *Manager) GetNodeByName(nodeName string) *EndpointInfo {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	// Search through nodesByIP to find the node by name
+	for _, nodeInfo := range m.nodesByIP {
+		if nodeInfo.Name == nodeName {
+			logrus.Debugf("Found node %s: IP=%s", nodeName, nodeInfo.IP)
+			return nodeInfo
+		}
+	}
+
+	logrus.Debugf("Node %s not found in cache. Available nodes: %d", nodeName, len(m.nodesByIP))
+	return nil
+}
+
 // Pod event handlers
 func (m *Manager) onPodAdd(obj interface{}) {
 	pod := obj.(*corev1.Pod)
