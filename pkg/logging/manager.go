@@ -56,7 +56,7 @@ func (lm *LogManager) Initialize() error {
 			MaxSize:    int(lm.config.MaxFileSize / (1024 * 1024)), // Convert to MB
 			MaxBackups: lm.config.MaxFiles,
 			MaxAge:     7, // days
-			Compress:   true,
+			Compress:   false,
 		}
 
 		lm.writers[logType] = writer

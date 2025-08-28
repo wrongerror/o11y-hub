@@ -21,7 +21,7 @@ type LogConfig struct {
 // DefaultLogConfig returns a default logging configuration
 func DefaultLogConfig() *LogConfig {
 	return &LogConfig{
-		Directory:   "./logs",
+		Directory:   "/var/lib/o11y-hub/log",
 		MaxFiles:    5,
 		EnabledLogs: map[string]bool{"http_traffic": true},
 		JSONFormat:  true,
