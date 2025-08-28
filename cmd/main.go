@@ -47,6 +47,14 @@ var (
 	// Logging configuration
 	logLevel = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 
+	// Traffic logging configuration
+	logDirectory         = flag.String("log-directory", "./logs", "Directory for traffic log files")
+	logMaxFiles          = flag.Int("log-max-files", 5, "Maximum number of rotated log files to keep")
+	logJSONFormat        = flag.Bool("log-json-format", true, "Use JSON format for traffic logs")
+	logMaxFileSize       = flag.Int64("log-max-file-size", 100*1024*1024, "Maximum size for log files in bytes")
+	enableHTTPTraffic    = flag.Bool("enable-http-traffic", false, "Enable HTTP traffic logging")
+	enableNetworkTraffic = flag.Bool("enable-network-traffic", false, "Enable network traffic logging")
+
 	// Version information
 	version   = "dev"
 	buildDate = "unknown"
@@ -102,6 +110,14 @@ func main() {
 		// Beyla configuration
 		BeylaEnabled: *beylaEnabled,
 		BeylaAddress: *beylaAddress,
+
+		// Traffic logging configuration
+		LogDirectory:         *logDirectory,
+		LogMaxFiles:          *logMaxFiles,
+		LogJSONFormat:        *logJSONFormat,
+		LogMaxFileSize:       *logMaxFileSize,
+		EnableHTTPTraffic:    *enableHTTPTraffic,
+		EnableNetworkTraffic: *enableNetworkTraffic,
 
 		// General configuration
 		ScrapeTimeout:     *scrapeTimeout,

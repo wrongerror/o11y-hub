@@ -63,6 +63,14 @@ type Config struct {
 	BeylaAddress string
 	BeylaEnabled bool
 
+	// Logging configuration
+	LogDirectory         string
+	LogMaxFiles          int
+	LogJSONFormat        bool
+	LogMaxFileSize       int64
+	EnableHTTPTraffic    bool
+	EnableNetworkTraffic bool
+
 	// General configuration
 	ScrapeTimeout  time.Duration
 	MaxConcurrency int

@@ -10,6 +10,7 @@ import (
 
 	"github.com/wrongerror/o11y-hub/pkg/collector"
 	"github.com/wrongerror/o11y-hub/pkg/k8s"
+	"github.com/wrongerror/o11y-hub/pkg/logging"
 	"github.com/wrongerror/o11y-hub/pkg/vizier"
 )
 
@@ -24,6 +25,11 @@ type Collector struct {
 	httpMetrics *HTTPMetrics
 	// Network flow metrics with expiring counters
 	networkMetrics *NetworkMetrics
+
+	// HTTP traffic logging components
+	httpTrafficLogger    *HTTPTrafficLogger
+	httpTrafficCollector *HTTPTrafficCollector
+	logManager           *logging.LogManager
 }
 
 // NewCollector creates a new Vizier collector
@@ -63,6 +69,61 @@ func NewCollector(logger *logrus.Logger, config collector.Config) (collector.Col
 		k8sManager = nil
 	}
 
+	// Initialize log manager if traffic logging is enabled
+	var logManager *logging.LogManager
+	var httpTrafficLogger *HTTPTrafficLogger
+	var httpTrafficCollector *HTTPTrafficCollector
+
+	if config.EnableHTTPTraffic {
+		// Create log configuration
+		logConfig := &logging.LogConfig{
+			Directory:   config.LogDirectory,
+			MaxFiles:    config.LogMaxFiles,
+			EnabledLogs: map[string]bool{"http_traffic": true},
+			JSONFormat:  config.LogJSONFormat,
+			MaxFileSize: config.LogMaxFileSize,
+		}
+
+		// Apply defaults if values are not set
+		if logConfig.Directory == "" {
+			logConfig.Directory = "./logs"
+		}
+		if logConfig.MaxFiles == 0 {
+			logConfig.MaxFiles = 5
+		}
+		if logConfig.MaxFileSize == 0 {
+			logConfig.MaxFileSize = 100 * 1024 * 1024 // 100MB
+		}
+
+		// Create and initialize log manager
+		logManager = logging.NewLogManager(logConfig, logger)
+		if err := logManager.Initialize(); err != nil {
+			logger.WithError(err).Warn("Failed to initialize log manager, continuing without traffic logging")
+			logManager = nil
+		} else {
+			// Create HTTP traffic logger
+			httpTrafficLogger = NewHTTPTrafficLogger(logManager, logger)
+			if k8sManager != nil {
+				httpTrafficLogger.SetK8sManager(k8sManager)
+			}
+
+			// Start the HTTP traffic logger
+			if err := httpTrafficLogger.Start(); err != nil {
+				logger.WithError(err).Warn("Failed to start HTTP traffic logger")
+				httpTrafficLogger = nil
+			} else {
+				// Create and start independent HTTP traffic collector
+				httpTrafficCollector = NewHTTPTrafficCollector(logger, vizierClient, config, httpTrafficLogger)
+				if err := httpTrafficCollector.Start(); err != nil {
+					logger.WithError(err).Warn("Failed to start HTTP traffic collector")
+					httpTrafficCollector = nil
+				} else {
+					logger.Info("HTTP traffic logging and collection enabled")
+				}
+			}
+		}
+	}
+
 	collector := &Collector{
 		logger:       logger,
 		config:       config,
@@ -73,6 +134,11 @@ func NewCollector(logger *logrus.Logger, config collector.Config) (collector.Col
 		httpMetrics: NewHTTPMetrics(logger),
 		// Initialize network flow metrics with counters and TTL support
 		networkMetrics: NewNetworkMetrics(logger),
+
+		// Traffic logging components
+		httpTrafficLogger:    httpTrafficLogger,
+		httpTrafficCollector: httpTrafficCollector,
+		logManager:           logManager,
 	}
 
 	// Start K8s manager if available
@@ -339,6 +405,33 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+// Stop gracefully stops the collector and cleans up resources
+func (c *Collector) Stop() {
+	if c.httpTrafficCollector != nil {
+		c.httpTrafficCollector.Stop()
+		c.logger.Info("HTTP traffic collector stopped")
+	}
+
+	if c.httpTrafficLogger != nil {
+		c.httpTrafficLogger.Stop()
+		c.logger.Info("HTTP traffic logger stopped")
+	}
+
+	if c.logManager != nil {
+		if err := c.logManager.Close(); err != nil {
+			c.logger.WithError(err).Warn("Failed to close log manager")
+		}
+		c.logger.Info("Log manager closed")
+	}
+
+	if c.httpMetrics != nil {
+		c.httpMetrics.Stop()
+		c.logger.Info("HTTP metrics stopped")
+	}
+
+	c.logger.Info("Vizier collector stopped")
 }
 
 func init() {
