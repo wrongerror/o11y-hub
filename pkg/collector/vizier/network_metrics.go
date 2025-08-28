@@ -228,36 +228,60 @@ func (m *NetworkMetrics) ProcessNetworkEvent(event map[string]interface{}) error
 		parsedNamespace, parsedServiceName := parseKubernetesDNS(dstNslookup)
 		if parsedNamespace != "" && parsedServiceName != "" {
 			// This is a K8s cluster internal DNS name
-			if dstNamespace == "" {
-				dstNamespace = parsedNamespace
-			}
-			if dstServiceName == "" {
-				dstServiceName = fmt.Sprintf("%s/%s", parsedNamespace, parsedServiceName)
-			}
-
-			// Special handling for node IPs: check if this is actually a node IP
-			// If it's a node IP, keep it as node type and set the node name
+			// Use K8s manager to get complete metadata for this service endpoint
 			if m.k8sManager != nil {
-				if endpointInfo := m.k8sManager.GetEndpointInfo(dstAddress); endpointInfo != nil && endpointInfo.Type == k8s.EndpointTypeNode {
-					dstNodeName = endpointInfo.NodeName
-					dstType = "node"
-					m.logger.WithFields(logrus.Fields{
-						"dst_address":      dstAddress,
-						"node_name":        endpointInfo.NodeName,
-						"service_from_dns": dstServiceName,
-					}).Debug("Node IP with K8s DNS - classified as node, service name preserved")
-				} else {
-					// Not a node IP, classify as service
+				// First, try to find the pod using the service information and IP address
+				if podInfo := m.k8sManager.GetPodByServiceAndIP(parsedNamespace, parsedServiceName, dstAddress); podInfo != nil {
+					// Found the specific pod for this service endpoint
+					dstNamespace = podInfo.Namespace
+					dstPodName = fmt.Sprintf("%s/%s", podInfo.Namespace, podInfo.Name)
+					dstNodeName = podInfo.NodeName
+					dstServiceName = fmt.Sprintf("%s/%s", parsedNamespace, parsedServiceName)
 					dstType = "service"
+
 					m.logger.WithFields(logrus.Fields{
-						"dst_address":      dstAddress,
-						"parsed_namespace": parsedNamespace,
-						"parsed_service":   parsedServiceName,
-						"new_type":         dstType,
-					}).Debug("K8s DNS parsed for IP - classified as service")
+						"dst_address":   dstAddress,
+						"pod_name":      podInfo.Name,
+						"pod_namespace": podInfo.Namespace,
+						"node_name":     podInfo.NodeName,
+						"service_name":  dstServiceName,
+					}).Debug("Found pod for K8s service endpoint via DNS and IP")
+				} else {
+					// Fallback: check if this is a node IP that happens to have a service DNS
+					if endpointInfo := m.k8sManager.GetEndpointInfo(dstAddress); endpointInfo != nil && endpointInfo.Type == k8s.EndpointTypeNode {
+						dstNodeName = endpointInfo.NodeName
+						dstType = "node"
+						dstServiceName = fmt.Sprintf("%s/%s", parsedNamespace, parsedServiceName)
+						m.logger.WithFields(logrus.Fields{
+							"dst_address":      dstAddress,
+							"node_name":        endpointInfo.NodeName,
+							"service_from_dns": dstServiceName,
+						}).Debug("Node IP with K8s DNS - classified as node, service name preserved")
+					} else {
+						// Default service classification
+						if dstNamespace == "" {
+							dstNamespace = parsedNamespace
+						}
+						if dstServiceName == "" {
+							dstServiceName = fmt.Sprintf("%s/%s", parsedNamespace, parsedServiceName)
+						}
+						dstType = "service"
+						m.logger.WithFields(logrus.Fields{
+							"dst_address":      dstAddress,
+							"parsed_namespace": parsedNamespace,
+							"parsed_service":   parsedServiceName,
+							"new_type":         dstType,
+						}).Debug("K8s DNS parsed for IP - classified as service (no specific pod found)")
+					}
 				}
 			} else {
-				// No k8s manager, default to service
+				// No k8s manager, default behavior
+				if dstNamespace == "" {
+					dstNamespace = parsedNamespace
+				}
+				if dstServiceName == "" {
+					dstServiceName = fmt.Sprintf("%s/%s", parsedNamespace, parsedServiceName)
+				}
 				dstType = "service"
 			}
 		} else {

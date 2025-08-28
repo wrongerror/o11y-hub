@@ -269,6 +269,39 @@ func (m *Manager) GetEndpointInfo(ip string) *EndpointInfo {
 	}
 }
 
+// GetPodByServiceAndIP finds a pod that matches both service and IP address
+// This is useful for identifying the specific pod behind a service endpoint
+func (m *Manager) GetPodByServiceAndIP(namespace, serviceName, ip string) *EndpointInfo {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	// Since multiple pods might share the same IP (hostNetwork pods),
+	// we need to search through all pods to find the one in the right namespace
+	for key, podInfo := range m.podsByName {
+		if podInfo.IP == ip && podInfo.Namespace == namespace {
+			m.logger.WithFields(logrus.Fields{
+				"ip":        ip,
+				"namespace": namespace,
+				"service":   serviceName,
+				"pod_name":  podInfo.Name,
+				"node_name": podInfo.NodeName,
+				"pod_key":   key,
+			}).Debug("Found matching pod for service endpoint")
+
+			return podInfo
+		}
+	}
+
+	// No matching pod found
+	m.logger.WithFields(logrus.Fields{
+		"ip":        ip,
+		"namespace": namespace,
+		"service":   serviceName,
+	}).Debug("No pod found for service endpoint")
+
+	return nil
+}
+
 // GetPodOwnerInfo gets owner information for a pod
 func (m *Manager) GetPodOwnerInfo(namespace, podName string) (string, string) {
 	key := namespace + "/" + podName
