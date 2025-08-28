@@ -204,6 +204,27 @@ func (m *NetworkMetrics) ProcessNetworkEvent(event map[string]interface{}) error
 		dstPodName = dstPodNameRaw
 	}
 
+	// Parse service names (handle namespace/service format from Pixie)
+	if srcServiceName != "" && strings.Contains(srcServiceName, "/") {
+		parts := strings.SplitN(srcServiceName, "/", 2)
+		if len(parts) == 2 {
+			if srcNamespace == "" {
+				srcNamespace = parts[0]
+			}
+			srcServiceName = parts[1]
+		}
+	}
+
+	if dstServiceName != "" && strings.Contains(dstServiceName, "/") {
+		parts := strings.SplitN(dstServiceName, "/", 2)
+		if len(parts) == 2 {
+			if dstNamespace == "" {
+				dstNamespace = parts[0]
+			}
+			dstServiceName = parts[1]
+		}
+	}
+
 	// Get additional owner information using K8s manager if available
 	if m.k8sManager != nil {
 		if srcOwnerName == "" && srcOwnerType == "" && srcNamespace != "" && srcPodName != "" {
@@ -234,9 +255,9 @@ func (m *NetworkMetrics) ProcessNetworkEvent(event map[string]interface{}) error
 				if podInfo := m.k8sManager.GetPodByServiceAndIP(parsedNamespace, parsedServiceName, dstAddress); podInfo != nil {
 					// Found the specific pod for this service endpoint
 					dstNamespace = podInfo.Namespace
-					dstPodName = fmt.Sprintf("%s/%s", podInfo.Namespace, podInfo.Name)
+					dstPodName = podInfo.Name
 					dstNodeName = podInfo.NodeName
-					dstServiceName = fmt.Sprintf("%s/%s", parsedNamespace, parsedServiceName)
+					dstServiceName = parsedServiceName
 					dstType = "service"
 
 					// Use the owner information from the pod metadata
@@ -261,7 +282,7 @@ func (m *NetworkMetrics) ProcessNetworkEvent(event map[string]interface{}) error
 					if endpointInfo := m.k8sManager.GetEndpointInfo(dstAddress); endpointInfo != nil && endpointInfo.Type == k8s.EndpointTypeNode {
 						dstNodeName = endpointInfo.NodeName
 						dstType = "node"
-						dstServiceName = fmt.Sprintf("%s/%s", parsedNamespace, parsedServiceName)
+						dstServiceName = parsedServiceName
 						m.logger.WithFields(logrus.Fields{
 							"dst_address":      dstAddress,
 							"node_name":        endpointInfo.NodeName,
@@ -273,7 +294,7 @@ func (m *NetworkMetrics) ProcessNetworkEvent(event map[string]interface{}) error
 							dstNamespace = parsedNamespace
 						}
 						if dstServiceName == "" {
-							dstServiceName = fmt.Sprintf("%s/%s", parsedNamespace, parsedServiceName)
+							dstServiceName = parsedServiceName
 						}
 						dstType = "service"
 						m.logger.WithFields(logrus.Fields{
@@ -290,7 +311,7 @@ func (m *NetworkMetrics) ProcessNetworkEvent(event map[string]interface{}) error
 					dstNamespace = parsedNamespace
 				}
 				if dstServiceName == "" {
-					dstServiceName = fmt.Sprintf("%s/%s", parsedNamespace, parsedServiceName)
+					dstServiceName = parsedServiceName
 				}
 				dstType = "service"
 			}

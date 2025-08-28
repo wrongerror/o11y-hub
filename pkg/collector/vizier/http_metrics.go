@@ -261,6 +261,18 @@ func (m *HTTPMetrics) ProcessHTTPEvent(event map[string]interface{}) error {
 		podName = podNameRaw
 	}
 
+	// Parse service name which also comes as "namespace/service-name" format from Pixie
+	if service != "" && strings.Contains(service, "/") {
+		parts := strings.SplitN(service, "/", 2)
+		if len(parts) == 2 {
+			// Use namespace from service if local namespace is empty
+			if namespace == "" {
+				namespace = parts[0]
+			}
+			service = parts[1]
+		}
+	}
+
 	// Extract remote/local addresses
 	remoteAddr := getStringValue(event, "remote_addr", "")
 	localAddr := getStringValue(event, "local_addr", "")
@@ -286,6 +298,18 @@ func (m *HTTPMetrics) ProcessHTTPEvent(event map[string]interface{}) error {
 		}
 	} else {
 		remotePodName = remotePodNameRaw
+	}
+
+	// Parse remote service name which also comes as "namespace/service-name" format from Pixie
+	if remoteServiceName != "" && strings.Contains(remoteServiceName, "/") {
+		parts := strings.SplitN(remoteServiceName, "/", 2)
+		if len(parts) == 2 {
+			// Use namespace from remote_service_name if remote namespace is empty
+			if remoteNamespace == "" {
+				remoteNamespace = parts[0]
+			}
+			remoteServiceName = parts[1]
+		}
 	}
 
 	// Create labels based on trace role with resolved remote endpoint info
