@@ -3,7 +3,6 @@ package vizier
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -17,13 +16,6 @@ type HTTPTrafficLogger struct {
 	k8sManager *k8s.Manager
 	logger     *logrus.Logger
 
-	// Event deduplication with TTL
-	processedEvents   map[string]time.Time
-	processedEventsMu sync.RWMutex
-	cleanupTicker     *time.Ticker
-	stopCleanup       chan struct{}
-	eventTTL          time.Duration
-
 	// Control state
 	isRunning bool
 	runningMu sync.RWMutex
@@ -34,11 +26,8 @@ func NewHTTPTrafficLogger(logManager *logging.LogManager, logger *logrus.Logger)
 	logChannel := logging.NewLogChannel(logManager, 1000, logger) // Buffer size of 1000
 
 	return &HTTPTrafficLogger{
-		logChannel:      logChannel,
-		logger:          logger,
-		processedEvents: make(map[string]time.Time),
-		stopCleanup:     make(chan struct{}),
-		eventTTL:        5 * time.Minute, // Same as HTTP metrics
+		logChannel: logChannel,
+		logger:     logger,
 	}
 }
 
@@ -59,10 +48,6 @@ func (h *HTTPTrafficLogger) Start() error {
 	// Start the log channel
 	h.logChannel.Start()
 
-	// Start background cleanup for event deduplication
-	h.cleanupTicker = time.NewTicker(2 * time.Minute)
-	go h.backgroundCleanup()
-
 	h.isRunning = true
 	h.logger.Info("HTTP traffic logger started")
 
@@ -78,14 +63,6 @@ func (h *HTTPTrafficLogger) Stop() {
 		return // Already stopped
 	}
 
-	// Signal stop to cleanup goroutine
-	close(h.stopCleanup)
-
-	// Stop cleanup ticker
-	if h.cleanupTicker != nil {
-		h.cleanupTicker.Stop()
-	}
-
 	// Stop the log channel
 	h.logChannel.Stop()
 
@@ -98,23 +75,7 @@ func (h *HTTPTrafficLogger) ProcessEvent(event *ProcessedHTTPEvent) error {
 	// Create traffic log from processed event
 	trafficLog := h.createTrafficLogFromProcessedEvent(event)
 
-	// Check for deduplication using the same event ID
-	now := time.Now()
-
-	h.processedEventsMu.RLock()
-	lastSeen, exists := h.processedEvents[event.EventID]
-	if exists && now.Sub(lastSeen) < h.eventTTL {
-		h.processedEventsMu.RUnlock()
-		return nil // Skip duplicate
-	}
-	h.processedEventsMu.RUnlock()
-
-	// Mark as processed
-	h.processedEventsMu.Lock()
-	h.processedEvents[event.EventID] = now
-	h.processedEventsMu.Unlock()
-
-	// Log the event
+	// Log the event directly (deduplication is handled by HTTPEventProcessor)
 	if err := h.logChannel.LogEvent(trafficLog); err != nil {
 		h.logger.WithError(err).Error("Failed to log HTTP traffic event")
 		return err
@@ -182,32 +143,4 @@ func parseUint16(s string) (uint16, error) {
 		return uint16(i), nil
 	}
 	return 0, fmt.Errorf("invalid uint16 value: %s", s)
-}
-
-// backgroundCleanup runs in background to periodically clean expired events
-func (h *HTTPTrafficLogger) backgroundCleanup() {
-	for {
-		select {
-		case <-h.cleanupTicker.C:
-			h.processedEventsMu.Lock()
-			now := time.Now()
-			expiredCount := 0
-
-			// Remove expired entries
-			for eventID, lastSeen := range h.processedEvents {
-				if now.Sub(lastSeen) > h.eventTTL {
-					delete(h.processedEvents, eventID)
-					expiredCount++
-				}
-			}
-			h.processedEventsMu.Unlock()
-
-			if expiredCount > 0 {
-				h.logger.WithField("expired_count", expiredCount).Debug("HTTP traffic logger cleanup removed expired events")
-			}
-
-		case <-h.stopCleanup:
-			return
-		}
-	}
 }

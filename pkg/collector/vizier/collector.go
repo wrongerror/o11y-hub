@@ -437,11 +437,6 @@ func (c *Collector) Stop() {
 		c.logger.Info("Log manager closed")
 	}
 
-	if c.httpMetrics != nil {
-		c.httpMetrics.Stop()
-		c.logger.Info("HTTP metrics stopped")
-	}
-
 	c.logger.Info("Vizier collector stopped")
 }
 

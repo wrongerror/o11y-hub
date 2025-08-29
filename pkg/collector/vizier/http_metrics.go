@@ -1,7 +1,6 @@
 package vizier
 
 import (
-	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -31,13 +30,6 @@ type HTTPMetrics struct {
 	serverRequestDuration  *metrics.Expirer[prometheus.Histogram]
 	serverRequestBodySize  *metrics.Expirer[prometheus.Histogram]
 	serverResponseBodySize *metrics.Expirer[prometheus.Histogram]
-
-	// Event deduplication with TTL
-	processedEvents   map[string]time.Time // Store event ID -> last seen time
-	processedEventsMu sync.RWMutex
-	cleanupTicker     *time.Ticker
-	stopCleanup       chan struct{}
-	eventTTL          time.Duration
 }
 
 // HTTPMetricLabels represents the label set for HTTP metrics
@@ -180,9 +172,6 @@ func NewHTTPMetrics(logger *logrus.Logger) *HTTPMetrics {
 		cachedClock:            clock,
 		logger:                 logger,
 		k8sManager:             nil, // Will be set by SetK8sManager
-		processedEvents:        make(map[string]time.Time),
-		stopCleanup:            make(chan struct{}),
-		eventTTL:               5 * time.Minute,
 		clientRequestDuration:  metrics.NewExpirer[prometheus.Histogram](clientRequestDurationVec, clock.ClockFunc(), ttl),
 		clientRequestBodySize:  metrics.NewExpirer[prometheus.Histogram](clientRequestBodySizeVec, clock.ClockFunc(), ttl),
 		clientResponseBodySize: metrics.NewExpirer[prometheus.Histogram](clientResponseBodySizeVec, clock.ClockFunc(), ttl),
@@ -275,18 +264,6 @@ func (m *HTTPMetrics) createLabelsFromEvent(event *ProcessedHTTPEvent) HTTPMetri
 	}
 }
 
-// Start starts background cleanup for expired histogram labels
-func (m *HTTPMetrics) Start() {
-	// Start background cleanup for event deduplication
-	m.cleanupTicker = time.NewTicker(2 * time.Minute)
-	go m.backgroundCleanup()
-}
-
-// Stop stops the background cleanup goroutine
-func (m *HTTPMetrics) Stop() {
-	close(m.stopCleanup)
-}
-
 // Update implements the collector.Collector interface
 func (m *HTTPMetrics) Update(ch chan<- prometheus.Metric) error {
 	// Trigger cleanup to remove expired histograms
@@ -301,33 +278,4 @@ func (m *HTTPMetrics) Update(ch chan<- prometheus.Metric) error {
 	m.serverResponseBodySize.Collect(ch)
 
 	return nil
-}
-
-// backgroundCleanup runs in background to periodically clean expired events
-func (m *HTTPMetrics) backgroundCleanup() {
-	for {
-		select {
-		case <-m.cleanupTicker.C:
-			m.processedEventsMu.Lock()
-			now := time.Now()
-			expiredCount := 0
-
-			// Remove expired entries
-			for eventID, lastSeen := range m.processedEvents {
-				if now.Sub(lastSeen) > m.eventTTL {
-					delete(m.processedEvents, eventID)
-					expiredCount++
-				}
-			}
-			m.processedEventsMu.Unlock()
-
-			if expiredCount > 0 {
-				m.logger.WithField("expired_count", expiredCount).Debug("Background cleanup removed expired events")
-			}
-
-		case <-m.stopCleanup:
-			m.cleanupTicker.Stop()
-			return
-		}
-	}
 }
