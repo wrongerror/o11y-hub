@@ -21,15 +21,17 @@ type Collector struct {
 	vizierClient *vizier.Client
 	k8sManager   *k8s.Manager
 
+	// Unified HTTP event processing
+	httpEventProcessor *HTTPEventProcessor
+
 	// HTTP metrics with expiring histograms
 	httpMetrics *HTTPMetrics
 	// Network flow metrics with expiring counters
 	networkMetrics *NetworkMetrics
 
 	// HTTP traffic logging components
-	httpTrafficLogger    *HTTPTrafficLogger
-	httpTrafficCollector *HTTPTrafficCollector
-	logManager           *logging.LogManager
+	httpTrafficLogger *HTTPTrafficLogger
+	logManager        *logging.LogManager
 }
 
 // NewCollector creates a new Vizier collector
@@ -72,7 +74,6 @@ func NewCollector(logger *logrus.Logger, config collector.Config) (collector.Col
 	// Initialize log manager if traffic logging is enabled
 	var logManager *logging.LogManager
 	var httpTrafficLogger *HTTPTrafficLogger
-	var httpTrafficCollector *HTTPTrafficCollector
 
 	if config.EnableHTTPTraffic {
 		// Create log configuration
@@ -112,14 +113,7 @@ func NewCollector(logger *logrus.Logger, config collector.Config) (collector.Col
 				logger.WithError(err).Warn("Failed to start HTTP traffic logger")
 				httpTrafficLogger = nil
 			} else {
-				// Create and start independent HTTP traffic collector
-				httpTrafficCollector = NewHTTPTrafficCollector(logger, vizierClient, config, httpTrafficLogger)
-				if err := httpTrafficCollector.Start(); err != nil {
-					logger.WithError(err).Warn("Failed to start HTTP traffic collector")
-					httpTrafficCollector = nil
-				} else {
-					logger.Info("HTTP traffic logging and collection enabled")
-				}
+				logger.Info("HTTP traffic logging enabled")
 			}
 		}
 	}
@@ -136,14 +130,30 @@ func NewCollector(logger *logrus.Logger, config collector.Config) (collector.Col
 		networkMetrics: NewNetworkMetrics(logger),
 
 		// Traffic logging components
-		httpTrafficLogger:    httpTrafficLogger,
-		httpTrafficCollector: httpTrafficCollector,
-		logManager:           logManager,
+		httpTrafficLogger: httpTrafficLogger,
+		logManager:        logManager,
 	}
+
+	// Create unified HTTP event processor
+	collector.httpEventProcessor = NewHTTPEventProcessor(logger)
+	if collector.k8sManager != nil {
+		collector.httpEventProcessor.SetK8sManager(collector.k8sManager)
+	}
+
+	// Register HTTP metrics as subscriber
+	collector.httpEventProcessor.AddSubscriber(collector.httpMetrics)
+
+	// Register HTTP traffic logger as subscriber if enabled
+	if httpTrafficLogger != nil {
+		collector.httpEventProcessor.AddSubscriber(httpTrafficLogger)
+	}
+
+	// Start the unified event processor
+	collector.httpEventProcessor.Start()
 
 	// Start K8s manager if available
 	if collector.k8sManager != nil {
-		// Set K8s manager for HTTP metrics
+		// Set K8s manager for HTTP metrics (for backward compatibility)
 		collector.httpMetrics.SetK8sManager(collector.k8sManager)
 		// Set K8s manager for network metrics
 		collector.networkMetrics.SetK8sManager(collector.k8sManager)
@@ -215,7 +225,7 @@ px.display(df, 'http_events')
 	// Log HTTP events data with all fields
 	c.logger.Infof("Found %d HTTP events with full field data", len(result.Data))
 
-	// Process each HTTP event record with the new histogram-based metrics system
+	// Process each HTTP event record through the unified event processor
 	eventCount := 0
 	processedCount := 0
 
@@ -242,17 +252,17 @@ px.display(df, 'http_events')
 			c.logger.Infof("Body content (truncated): req=%q, resp=%q", reqBody, respBody)
 		}
 
-		// Process event with the new histogram metrics system
-		if err := c.httpMetrics.ProcessHTTPEvent(row); err != nil {
-			c.logger.WithError(err).Debug("Failed to process HTTP event")
+		// Process event through the unified event processor (will notify all subscribers)
+		if err := c.httpEventProcessor.ProcessEvent(row); err != nil {
+			c.logger.WithError(err).Debug("Failed to process HTTP event through unified processor")
 		} else {
 			processedCount++
 		}
 	}
 
-	c.logger.Infof("Processed %d/%d HTTP events successfully", processedCount, eventCount)
+	c.logger.Infof("Processed %d/%d HTTP events successfully through unified processor", processedCount, eventCount)
 
-	// Collect all histogram metrics
+	// Collect all histogram metrics from the HTTP metrics subscriber
 	c.httpMetrics.Collect(ch)
 
 	return nil
@@ -409,9 +419,10 @@ func truncateString(s string, maxLen int) string {
 
 // Stop gracefully stops the collector and cleans up resources
 func (c *Collector) Stop() {
-	if c.httpTrafficCollector != nil {
-		c.httpTrafficCollector.Stop()
-		c.logger.Info("HTTP traffic collector stopped")
+	// Stop the unified HTTP event processor first
+	if c.httpEventProcessor != nil {
+		c.httpEventProcessor.Stop()
+		c.logger.Info("HTTP event processor stopped")
 	}
 
 	if c.httpTrafficLogger != nil {
