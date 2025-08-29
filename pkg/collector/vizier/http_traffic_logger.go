@@ -176,14 +176,6 @@ func (h *HTTPTrafficLogger) createTrafficLogFromProcessedEvent(event *ProcessedH
 	return trafficLog
 }
 
-// ProcessHTTPEvent processes an HTTP event for logging (for backward compatibility)
-func (h *HTTPTrafficLogger) ProcessHTTPEvent(event map[string]interface{}) {
-	// This method is now deprecated in favor of the unified event processor
-	// It's kept for backward compatibility but should not be used directly
-	// The unified processor will call ProcessEvent instead
-	h.logger.Warn("ProcessHTTPEvent called directly - this should be handled by the unified event processor")
-}
-
 // parseUint16 safely converts a string to uint16
 func parseUint16(s string) (uint16, error) {
 	if i, err := parseFloat64(s); err == nil && i >= 0 && i <= 65535 {

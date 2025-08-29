@@ -228,15 +228,6 @@ func (m *HTTPMetrics) ProcessEvent(event *ProcessedHTTPEvent) error {
 	return nil
 }
 
-// ProcessHTTPEvent processes a raw HTTP event (for backward compatibility with collector)
-func (m *HTTPMetrics) ProcessHTTPEvent(rawEvent map[string]interface{}) error {
-	// This method is now deprecated in favor of the unified event processor
-	// It's kept for backward compatibility but should not be used directly
-	// The unified processor will call ProcessEvent instead
-	m.logger.Warn("ProcessHTTPEvent called directly - this should be handled by the unified event processor")
-	return nil
-}
-
 // Collect implements the prometheus.Collector interface for backward compatibility
 func (m *HTTPMetrics) Collect(ch chan<- prometheus.Metric) {
 	// Trigger cleanup to remove expired histograms
